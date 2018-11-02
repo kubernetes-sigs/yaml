@@ -7,6 +7,7 @@ import (
 	"io"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 )
@@ -42,6 +43,40 @@ func UnmarshalStrict(y []byte, o interface{}, opts ...JSONOpt) error {
 	return yamlUnmarshal(y, o, true, append(opts, DisallowUnknownFields)...)
 }
 
+// handleUnknownFieldError either returns the input error untouched or
+// in case of an unknown field returns the whole yaml with error lines marked
+func handleUnknownFieldError(buf []byte, err error) error {
+	// check if the error is of a particular type; golang's json does not define
+	// a custom type for this - only a string.
+	errContents := strings.Split(err.Error(), "unknown field ")
+	if len(errContents) == 1 {
+		return err
+	}
+
+	// extract the field
+	field := errContents[1]
+	field = strings.Replace(field, "\"", "", -1)
+
+	// find lines and offsets that have the field.
+	// NOTE: it just lists all fields with the same name, even if such a valid.
+	lines := []string{}
+	bufLines := strings.Split(string(buf), "\n")
+	for _, line := range bufLines {
+		f := field + ":"
+		idx := strings.Index(line, f)
+		if idx == -1 {
+			lines = append(lines, line)
+			continue
+		}
+		lines = append(lines, line+" <----")
+	}
+
+	if len(lines) > 0 {
+		return fmt.Errorf("%v; dumping YAML document; the following lines need inspection:\n%s", err, strings.Join(lines, "\n"))
+	}
+	return err
+}
+
 // yamlUnmarshal unmarshals the given YAML byte stream into the given interface,
 // optionally performing the unmarshalling strictly
 func yamlUnmarshal(y []byte, o interface{}, strict bool, opts ...JSONOpt) error {
@@ -57,7 +92,7 @@ func yamlUnmarshal(y []byte, o interface{}, strict bool, opts ...JSONOpt) error 
 
 	err = jsonUnmarshal(bytes.NewReader(j), o, opts...)
 	if err != nil {
-		return fmt.Errorf("error unmarshaling JSON: %v", err)
+		return fmt.Errorf("error unmarshaling JSON: %v", handleUnknownFieldError(y, err))
 	}
 
 	return nil
@@ -73,7 +108,7 @@ func jsonUnmarshal(r io.Reader, o interface{}, opts ...JSONOpt) error {
 		d = opt(d)
 	}
 	if err := d.Decode(&o); err != nil {
-		return fmt.Errorf("while decoding JSON: %v", err)
+		return err
 	}
 	return nil
 }
