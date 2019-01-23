@@ -104,6 +104,27 @@ b:
 		"b": &NamedThing{Name: "TestB"},
 	}
 	unmarshal(t, y, &s5, &e5)
+
+	// stream of yaml documents
+	y = []byte("---\na: 1\n---\nb: 2\n")
+	s6 := []map[string]int{}
+	e6 := []map[string]int{{"a": 1}, {"b": 2}}
+	unmarshal(t, y, &s6, &e6)
+
+	// null input
+	y = []byte("null")
+	var s7 *interface{}
+	var e7 *interface{}
+	unmarshal(t, y, &s7, &e7)
+
+	y = []byte("[null, null]")
+	s8 := []interface{}{}
+	e8 := []interface{}{nil, nil}
+	unmarshal(t, y, &s8, &e8)
+
+	// empty
+	y = []byte("")
+	unmarshal(t, y, "", "")
 }
 
 func unmarshal(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
@@ -332,6 +353,18 @@ func TestYAMLToJSON(t *testing.T) {
 			"- t: null\n",
 			`[{"t":null}]`,
 			nil,
+		}, {
+			"null\n",
+			`null`,
+			nil,
+		}, {
+			"[null,null]\n",
+			`[null,null]`,
+			strPtr("- null\n- null\n"),
+		}, {
+			"\n",
+			`null`,
+			strPtr("null\n"),
 		},
 	}
 
