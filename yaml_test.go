@@ -454,3 +454,41 @@ foo: baz
 		t.Error("expected YAMLtoJSONStrict to fail on duplicate field names")
 	}
 }
+
+type benchmarkTestItem struct {
+	A string
+	B bool
+	C int
+	D *string
+}
+
+func BenchmarkBigYamlList(b *testing.B) {
+	testItem := &benchmarkTestItem{
+		A: "hello world",
+		B: true,
+		C: 1337,
+		D: nil,
+	}
+
+	const listSize = 10000
+	testData := make([]*benchmarkTestItem, listSize)
+	for i := range testData {
+		testData[i] = testItem
+	}
+	rawBytes, err := Marshal(testData)
+	if err != nil {
+		b.Errorf("error marshalling test data as yaml: %v", err)
+		return
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var tmp []*benchmarkTestItem
+		err = Unmarshal(rawBytes, &tmp)
+		if err != nil {
+			b.Errorf("unable to unmarshalling test data as yaml: %v", err)
+			return
+		}
+		tmp = nil
+	}
+}
