@@ -132,16 +132,16 @@ b:
 	e9 := []interface{}{}
 	unmarshal(t, y, &s9, &e9)
 
-	// test with the destination value already having content in it
+	// Test with the destination value already having content in it.
 	y = []byte("a: b\n")
-	s10 := map[string]string{"hello": "world"} // should get overridden
-	e10 := []interface{}{"a", "b"}
+	s10 := map[string]string{"hello": "world"} // should get merged with the input
+	e10 := map[string]string{"a": "b", "hello": "world"}
 	unmarshal(t, y, &s10, &e10)
 
-	// an empty stream should produce a null value, and overwrite any existing
-	// value in the output parameter
-	y = []byte("---\n")
-	s11 := []interface{}{true, false} // should get overridden
+	// A null input value should produce a zero value of the input itself, even
+	// if it's initialized. This follows the json.Unmarshal behavior.
+	y = []byte("null\n")
+	s11 := []interface{}{true, false} // should get zeroed out to be an empty list
 	e11 := []interface{}{}
 	unmarshal(t, y, &s11, &e11)
 }
