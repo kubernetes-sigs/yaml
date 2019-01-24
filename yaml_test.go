@@ -59,91 +59,104 @@ type NestedSlice struct {
 }
 
 func TestUnmarshal(t *testing.T) {
-	y := []byte("a: 1")
-	s1 := UnmarshalString{}
-	e1 := UnmarshalString{A: "1"}
-	unmarshal(t, y, &s1, &e1)
+	t.Run("simple", func(t *testing.T) {
+		y := []byte("a: 1")
+		s1 := UnmarshalString{}
+		e1 := UnmarshalString{A: "1"}
+		unmarshal(t, y, &s1, &e1)
 
-	y = []byte("a: true")
-	s1 = UnmarshalString{}
-	e1 = UnmarshalString{A: "true"}
-	unmarshal(t, y, &s1, &e1)
+		y = []byte("a: true")
+		s1 = UnmarshalString{}
+		e1 = UnmarshalString{A: "true"}
+		unmarshal(t, y, &s1, &e1)
 
-	y = []byte("true: 1")
-	s1 = UnmarshalString{}
-	e1 = UnmarshalString{True: "1"}
-	unmarshal(t, y, &s1, &e1)
+		y = []byte("true: 1")
+		s1 = UnmarshalString{}
+		e1 = UnmarshalString{True: "1"}
+		unmarshal(t, y, &s1, &e1)
 
-	y = []byte("a:\n  a: 1")
-	s2 := UnmarshalNestedString{}
-	e2 := UnmarshalNestedString{NestedString{"1"}}
-	unmarshal(t, y, &s2, &e2)
+		y = []byte("a:\n  a: 1")
+		s2 := UnmarshalNestedString{}
+		e2 := UnmarshalNestedString{NestedString{"1"}}
+		unmarshal(t, y, &s2, &e2)
 
-	y = []byte("a:\n  - b: abc\n    c: def\n  - b: 123\n    c: 456\n")
-	s3 := UnmarshalSlice{}
-	e3 := UnmarshalSlice{[]NestedSlice{NestedSlice{"abc", strPtr("def")}, NestedSlice{"123", strPtr("456")}}}
-	unmarshal(t, y, &s3, &e3)
+		y = []byte("a:\n  - b: abc\n    c: def\n  - b: 123\n    c: 456\n")
+		s3 := UnmarshalSlice{}
+		e3 := UnmarshalSlice{[]NestedSlice{NestedSlice{"abc", strPtr("def")}, NestedSlice{"123", strPtr("456")}}}
+		unmarshal(t, y, &s3, &e3)
 
-	y = []byte("a:\n  b: 1")
-	s4 := UnmarshalStringMap{}
-	e4 := UnmarshalStringMap{map[string]string{"b": "1"}}
-	unmarshal(t, y, &s4, &e4)
+		y = []byte("a:\n  b: 1")
+		s4 := UnmarshalStringMap{}
+		e4 := UnmarshalStringMap{map[string]string{"b": "1"}}
+		unmarshal(t, y, &s4, &e4)
 
-	y = []byte(`
+		y = []byte(`
 a:
   name: TestA
 b:
   name: TestB
 `)
-	type NamedThing struct {
-		Name string `json:"name"`
-	}
-	s5 := map[string]*NamedThing{}
-	e5 := map[string]*NamedThing{
-		"a": &NamedThing{Name: "TestA"},
-		"b": &NamedThing{Name: "TestB"},
-	}
-	unmarshal(t, y, &s5, &e5)
+		type NamedThing struct {
+			Name string `json:"name"`
+		}
+		s5 := map[string]*NamedThing{}
+		e5 := map[string]*NamedThing{
+			"a": &NamedThing{Name: "TestA"},
+			"b": &NamedThing{Name: "TestB"},
+		}
+		unmarshal(t, y, &s5, &e5)
 
-	// stream of yaml documents
-	y = []byte("---\na: 1\n---\nb: 2\n")
-	s6 := []map[string]int{}
-	e6 := []map[string]int{{"a": 1}, {"b": 2}}
-	unmarshal(t, y, &s6, &e6)
+		y = []byte("[null, null]")
+		s8 := []interface{}{}
+		e8 := []interface{}{nil, nil}
+		unmarshal(t, y, &s8, &e8)
 
-	// null input
-	y = []byte("null")
-	var s7 *interface{}
-	var e7 *interface{}
-	unmarshal(t, y, &s7, &e7)
+	})
 
-	y = []byte("[null, null]")
-	s8 := []interface{}{}
-	e8 := []interface{}{nil, nil}
-	unmarshal(t, y, &s8, &e8)
+	t.Run("stream input", func(t *testing.T) {
+		// stream of yaml documents
+		y := []byte("---\na: 1\n---\nb: 2\n")
+		s6 := []map[string]int{}
+		e6 := []map[string]int{{"a": 1}, {"b": 2}}
+		unmarshal(t, y, &s6, &e6)
+	})
 
-	// empty
-	y = []byte("")
-	unmarshal(t, y, "", "")
+	t.Run("null input", func(t *testing.T) {
+		// null input
+		y := []byte("null")
+		var s7 *interface{}
+		var e7 *interface{}
+		unmarshal(t, y, &s7, &e7)
+	})
 
-	// empty stream of yaml documents
-	y = []byte("---\n")
-	s9 := []interface{}{}
-	e9 := []interface{}{}
-	unmarshal(t, y, &s9, &e9)
+	t.Run("empty input", func(t *testing.T) {
+		// empty
+		y := []byte("")
+		unmarshal(t, y, "", "")
 
-	// Test with the destination value already having content in it.
-	y = []byte("a: b\n")
-	s10 := map[string]string{"hello": "world"} // should get merged with the input
-	e10 := map[string]string{"a": "b", "hello": "world"}
-	unmarshal(t, y, &s10, &e10)
+		// empty stream of yaml documents
+		y = []byte("---\n")
+		s9 := []interface{}{}
+		e9 := []interface{}{}
+		unmarshal(t, y, &s9, &e9)
+	})
 
-	// A null input value should produce a zero value of the input itself, even
-	// if it's initialized. This follows the json.Unmarshal behavior.
-	y = []byte("null\n")
-	s11 := []interface{}{true, false} // should get zeroed out to be an empty list
-	e11 := []interface{}{}
-	unmarshal(t, y, &s11, &e11)
+	t.Run("map output get merged with input", func(t *testing.T) {
+		// Test with the destination value already having content in it.
+		y := []byte("a: b\n")
+		s10 := map[string]string{"hello": "world"} // should get merged with the input
+		e10 := map[string]string{"a": "b", "hello": "world"}
+		unmarshal(t, y, &s10, &e10)
+	})
+
+	t.Run("null input sets output parameter to zero value", func(t *testing.T) {
+		// A null input value should produce a zero value of the input itself, even
+		// if it's initialized. This follows the json.Unmarshal behavior.
+		y := []byte("null\n")
+		s11 := []interface{}{true, false} // should get zeroed out to be an empty list
+		e11 := []interface{}{}
+		unmarshal(t, y, &s11, &e11)
+	})
 }
 
 func unmarshal(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
