@@ -125,6 +125,13 @@ b:
 	// empty
 	y = []byte("")
 	unmarshal(t, y, "", "")
+
+	// empty stream of yaml documents
+	y = []byte("---\n")
+	s9 := []interface{}{}
+	e9 := []interface{}{}
+	unmarshal(t, y, &s9, &e9)
+
 }
 
 func unmarshal(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
@@ -363,6 +370,14 @@ func TestYAMLToJSON(t *testing.T) {
 			strPtr("- null\n- null\n"),
 		}, {
 			"\n",
+			`null`,
+			strPtr("null\n"),
+		}, {
+			"---\na: b\n---\nc: d\n", // test a stream of items
+			`[{"a":"b"},{"c":"d"}]`,
+			strPtr("- a: b\n- c: d\n"),
+		}, {
+			"---\n", // test an empty stream
 			`null`,
 			strPtr("null\n"),
 		},
