@@ -1,7 +1,6 @@
 package yaml
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"reflect"
@@ -10,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	jsoniter "github.com/json-iterator/go"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -38,8 +38,8 @@ func TestMarshal(t *testing.T) {
 }
 
 type UnmarshalString struct {
-	A    string
-	True string
+	A string
+	B string
 }
 
 type UnmarshalStringMap struct {
@@ -74,9 +74,9 @@ func TestUnmarshal(t *testing.T) {
 	e1 = UnmarshalString{A: "true"}
 	unmarshal(t, y, &s1, &e1)
 
-	y = []byte("true: 1")
+	y = []byte("b: true")
 	s1 = UnmarshalString{}
-	e1 = UnmarshalString{True: "1"}
+	e1 = UnmarshalString{B: "true"}
 	unmarshal(t, y, &s1, &e1)
 
 	y = []byte("a:\n  a: 1")
@@ -124,34 +124,34 @@ func unmarshal(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
 }
 
 func TestUnmarshalStrict(t *testing.T) {
-	y := []byte("a: 1")
+	y := []byte("A: 1")
 	s1 := UnmarshalString{}
 	e1 := UnmarshalString{A: "1"}
 	unmarshalStrict(t, y, &s1, &e1)
 
-	y = []byte("a: true")
+	y = []byte("A: true")
 	s1 = UnmarshalString{}
 	e1 = UnmarshalString{A: "true"}
 	unmarshalStrict(t, y, &s1, &e1)
 
-	y = []byte("true: 1")
+	y = []byte("B: true")
 	s1 = UnmarshalString{}
-	e1 = UnmarshalString{True: "1"}
+	e1 = UnmarshalString{B: "true"}
 	unmarshalStrict(t, y, &s1, &e1)
 
-	y = []byte("a:\n  a: 1")
+	y = []byte("A:\n  A: 1")
 	s2 := UnmarshalNestedString{}
 	e2 := UnmarshalNestedString{NestedString{"1"}}
 	unmarshalStrict(t, y, &s2, &e2)
 
-	y = []byte("a:\n  - b: abc\n    c: def\n  - b: 123\n    c: 456\n")
+	y = []byte("A:\n  - B: abc\n    C: def\n  - B: 123\n    C: 456\n")
 	s3 := UnmarshalSlice{}
 	e3 := UnmarshalSlice{[]NestedSlice{NestedSlice{"abc", strPtr("def")}, NestedSlice{"123", strPtr("456")}}}
 	unmarshalStrict(t, y, &s3, &e3)
 
-	y = []byte("a:\n  b: 1")
+	y = []byte("A:\n  B: 1")
 	s4 := UnmarshalStringMap{}
-	e4 := UnmarshalStringMap{map[string]string{"b": "1"}}
+	e4 := UnmarshalStringMap{map[string]string{"B": "1"}}
 	unmarshalStrict(t, y, &s4, &e4)
 
 	y = []byte(`
@@ -190,15 +190,15 @@ a:
 }
 
 func TestUnmarshalStrictFails(t *testing.T) {
-	y := []byte("a: true\na: false")
+	y := []byte("A: true\nA: false")
 	s1 := UnmarshalString{}
 	unmarshalStrictFail(t, y, &s1)
 
-	y = []byte("a:\n  - b: abc\n    c: 32\n      b: 123")
+	y = []byte("A:\n  - B: abc\n    C: 32\n      B: 123")
 	s2 := UnmarshalSlice{}
 	unmarshalStrictFail(t, y, &s2)
 
-	y = []byte("a:\n  b: 1\n    c: 3")
+	y = []byte("A:\n  B: 1\n    C: 3")
 	s3 := UnmarshalStringMap{}
 	unmarshalStrictFail(t, y, &s3)
 
@@ -225,6 +225,12 @@ unknown: Some-Value
 `)
 	s5 := NamedThing{}
 	unmarshalStrictFail(t, y, &s5)
+
+	// Strict unmarshal should fail for case-sensitive fields; 'a' should be 'A'.
+	y = []byte("a: test")
+	s6 := UnmarshalString{}
+	unmarshalStrictFail(t, y, &s6)
+
 }
 
 func unmarshalStrict(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
@@ -489,9 +495,9 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 				t.Errorf("jsonToYAML() = %v, want %v", spew.Sdump(got), spew.Sdump(tt.expected))
 			}
 
-			jsonBytes, err := json.Marshal(tt.input)
+			jsonBytes, err := jsonIterator.Marshal(tt.input)
 			if err != nil {
-				t.Fatalf("unexpected json.Marshal error: %v", err)
+				t.Fatalf("unexpected jsonIterator.Marshal error: %v", err)
 			}
 			var gotByRoundtrip yaml.MapSlice
 			if err := yaml.Unmarshal(jsonBytes, &gotByRoundtrip); err != nil {
@@ -525,7 +531,7 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 			}
 
 			if !reflect.DeepEqual(got, gotByRoundtrip) {
-				t.Errorf("yaml.Unmarshal(json.Marshal(tt.input)) = %v, want %v\njson: %s", spew.Sdump(gotByRoundtrip), spew.Sdump(got), string(jsonBytes))
+				t.Errorf("yaml.Unmarshal(jsonIterator.Marshal(tt.input)) = %v, want %v\njson: %s", spew.Sdump(gotByRoundtrip), spew.Sdump(got), string(jsonBytes))
 			}
 		})
 	}
@@ -541,5 +547,27 @@ func sortMapSlicesInPlace(x interface{}) {
 		sort.Slice(x, func(a, b int) bool {
 			return x[a].Key.(string) < x[b].Key.(string)
 		})
+	}
+}
+
+func TestUnmarshalWithConfig(t *testing.T) {
+	config := jsoniter.Config{
+		EscapeHTML:             true,
+		SortMapKeys:            true,
+		ValidateJsonRawMessage: true,
+		CaseSensitive:          true,
+		DisallowUnknownFields:  true,
+	}.Froze()
+
+	b := []byte("A: test")
+	s := &UnmarshalString{}
+	e := &UnmarshalString{A: "test"}
+
+	if err := UnmarshalWithConfig(b, s, true, config); err != nil {
+		t.Fatal("expected no error when using UnmarshalWithConfig")
+	}
+	if !reflect.DeepEqual(s, e) {
+		t.Fatalf("unmarshal YAML was unsuccessful, expected: %+#v, got: %+#v",
+			e, s)
 	}
 }

@@ -4,17 +4,60 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"reflect"
 	"strconv"
 
+	jsoniter "github.com/json-iterator/go"
 	"gopkg.in/yaml.v2"
 )
+
+// The json-iterator implementation is based on:
+// https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apimachinery/pkg/runtime/serializer/json/json.go
+
+type customNumberExtension struct {
+	jsoniter.DummyExtension
+}
+
+// createJSONIterator returns a jsoniterator API that's configured to be
+// compatible with the encoding/json standard library.
+func createJSONIterator() jsoniter.API {
+	config := jsoniter.Config{
+		EscapeHTML:             true,
+		SortMapKeys:            true,
+		ValidateJsonRawMessage: true,
+	}.Froze()
+	// Force jsoniter to decode number to interface{} via int64/float64, if possible.
+	config.RegisterExtension(&customNumberExtension{})
+	return config
+}
+
+// createCaseSensitiveStrictJSONIterator returns a jsoniterator API that's configured to be
+// case-sensitive, but also disallow unknown fields when unmarshalling. It is compatible with
+// the encoding/json standard library.
+func createCaseSensitiveStrictJSONIterator() jsoniter.API {
+	config := jsoniter.Config{
+		EscapeHTML:             true,
+		SortMapKeys:            true,
+		ValidateJsonRawMessage: true,
+		CaseSensitive:          true,
+		DisallowUnknownFields:  true,
+	}.Froze()
+	// Force jsoniter to decode number to interface{} via int64/float64, if possible.
+	config.RegisterExtension(&customNumberExtension{})
+	return config
+}
+
+// Private copies of jsoniter to try to shield against possible mutations
+// from outside. Still does not protect from package level jsoniter.Register*() functions - someone calling them
+// in some other library will mess with every usage of the jsoniter library in the whole program.
+// See https://github.com/json-iterator/go/issues/265
+var jsonIterator = createJSONIterator()
+var caseSensitiveStrictJSONIterator = createCaseSensitiveStrictJSONIterator()
 
 // Marshal marshals the object into JSON then converts JSON to YAML and returns the
 // YAML.
 func Marshal(o interface{}) ([]byte, error) {
-	j, err := json.Marshal(o)
+	j, err := caseSensitiveStrictJSONIterator.Marshal(o)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling into JSON: %v", err)
 	}
@@ -28,23 +71,30 @@ func Marshal(o interface{}) ([]byte, error) {
 }
 
 // JSONOpt is a decoding option for decoding from JSON format.
+// Deprecated as the backend for parsing JSON is now json-iter.
 type JSONOpt func(*json.Decoder) *json.Decoder
 
-// Unmarshal converts YAML to JSON then uses JSON to unmarshal into an object,
-// optionally configuring the behavior of the JSON unmarshal.
+// Unmarshal converts YAML to JSON then uses JSON to unmarshal into an object.
+// Usage of JSONOpt is deprecated.
 func Unmarshal(y []byte, o interface{}, opts ...JSONOpt) error {
-	return yamlUnmarshal(y, o, false, opts...)
+	return yamlUnmarshal(y, o, false, jsonIterator)
 }
 
 // UnmarshalStrict strictly converts YAML to JSON then uses JSON to unmarshal
-// into an object, optionally configuring the behavior of the JSON unmarshal.
+// into an object. Usage of JSONOpt is deprecated.
 func UnmarshalStrict(y []byte, o interface{}, opts ...JSONOpt) error {
-	return yamlUnmarshal(y, o, true, append(opts, DisallowUnknownFields)...)
+	return yamlUnmarshal(y, o, true, caseSensitiveStrictJSONIterator)
+}
+
+// UnmarshalWithConfig converts YAML to JSON, optionally by using strict mode and then
+// uses a custom json-iterator Config object to unmarshal the JSON bytes.
+func UnmarshalWithConfig(y []byte, o interface{}, strictYAML bool, jsonConfig jsoniter.API) error {
+	return yamlUnmarshal(y, o, strictYAML, jsonConfig)
 }
 
 // yamlUnmarshal unmarshals the given YAML byte stream into the given interface,
-// optionally performing the unmarshalling strictly
-func yamlUnmarshal(y []byte, o interface{}, strict bool, opts ...JSONOpt) error {
+// optionally performing the unmarshalling strictly.
+func yamlUnmarshal(y []byte, o interface{}, strict bool, jsonConfig jsoniter.API) error {
 	vo := reflect.ValueOf(o)
 	unmarshalFn := yaml.Unmarshal
 	if strict {
@@ -55,27 +105,7 @@ func yamlUnmarshal(y []byte, o interface{}, strict bool, opts ...JSONOpt) error 
 		return fmt.Errorf("error converting YAML to JSON: %v", err)
 	}
 
-	err = jsonUnmarshal(bytes.NewReader(j), o, opts...)
-	if err != nil {
-		return fmt.Errorf("error unmarshaling JSON: %v", err)
-	}
-
-	return nil
-}
-
-// jsonUnmarshal unmarshals the JSON byte stream from the given reader into the
-// object, optionally applying decoder options prior to decoding.  We are not
-// using json.Unmarshal directly as we want the chance to pass in non-default
-// options.
-func jsonUnmarshal(r io.Reader, o interface{}, opts ...JSONOpt) error {
-	d := json.NewDecoder(r)
-	for _, opt := range opts {
-		d = opt(d)
-	}
-	if err := d.Decode(&o); err != nil {
-		return fmt.Errorf("while decoding JSON: %v", err)
-	}
-	return nil
+	return jsonConfig.Unmarshal(j, &o)
 }
 
 // JSONToYAML Converts JSON to YAML.
@@ -136,7 +166,7 @@ func yamlToJSON(y []byte, jsonTarget *reflect.Value, yamlUnmarshal func([]byte, 
 	}
 
 	// Convert this object to JSON and return the data.
-	return json.Marshal(jsonObj)
+	return caseSensitiveStrictJSONIterator.Marshal(jsonObj)
 }
 
 func convertToJSONableObject(yamlObj interface{}, jsonTarget *reflect.Value) (interface{}, error) {
