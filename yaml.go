@@ -8,7 +8,8 @@ import (
 	"reflect"
 	"strconv"
 
-	"gopkg.in/yaml.v2"
+	yaml3 "gopkg.in/laverya/yaml.v3"
+	yaml2 "gopkg.in/yaml.v2"
 )
 
 // Marshal marshals the object into JSON then converts JSON to YAML and returns the
@@ -33,23 +34,20 @@ type JSONOpt func(*json.Decoder) *json.Decoder
 // Unmarshal converts YAML to JSON then uses JSON to unmarshal into an object,
 // optionally configuring the behavior of the JSON unmarshal.
 func Unmarshal(y []byte, o interface{}, opts ...JSONOpt) error {
-	return yamlUnmarshal(y, o, false, opts...)
+	return yamlUnmarshal(y, o, opts...)
 }
 
 // UnmarshalStrict strictly converts YAML to JSON then uses JSON to unmarshal
 // into an object, optionally configuring the behavior of the JSON unmarshal.
 func UnmarshalStrict(y []byte, o interface{}, opts ...JSONOpt) error {
-	return yamlUnmarshal(y, o, true, append(opts, DisallowUnknownFields)...)
+	return yamlUnmarshal(y, o, append(opts, DisallowUnknownFields)...)
 }
 
 // yamlUnmarshal unmarshals the given YAML byte stream into the given interface,
 // optionally performing the unmarshalling strictly
-func yamlUnmarshal(y []byte, o interface{}, strict bool, opts ...JSONOpt) error {
+func yamlUnmarshal(y []byte, o interface{}, opts ...JSONOpt) error {
 	vo := reflect.ValueOf(o)
-	unmarshalFn := yaml.Unmarshal
-	if strict {
-		unmarshalFn = yaml.UnmarshalStrict
-	}
+	unmarshalFn := yaml3.Unmarshal
 	j, err := yamlToJSON(y, &vo, unmarshalFn)
 	if err != nil {
 		return fmt.Errorf("error converting YAML to JSON: %v", err)
@@ -82,18 +80,24 @@ func jsonUnmarshal(r io.Reader, o interface{}, opts ...JSONOpt) error {
 func JSONToYAML(j []byte) ([]byte, error) {
 	// Convert the JSON to an object.
 	var jsonObj interface{}
-	// We are using yaml.Unmarshal here (instead of json.Unmarshal) because the
+	// We are using yaml3.Unmarshal here (instead of json.Unmarshal) because the
 	// Go JSON library doesn't try to pick the right number type (int, float,
 	// etc.) when unmarshalling to interface{}, it just picks float64
 	// universally. go-yaml does go through the effort of picking the right
 	// number type, so we can preserve number type throughout this process.
-	err := yaml.Unmarshal(j, &jsonObj)
+	err := yaml3.Unmarshal(j, &jsonObj)
 	if err != nil {
 		return nil, err
 	}
 
 	// Marshal this object into YAML.
-	return yaml.Marshal(jsonObj)
+	var buf bytes.Buffer
+	enc := yaml3.NewEncoder(&buf)
+	enc.SetIndent(2) // use an indentation length of 2
+	enc.SetLineLength(-1) // allow lines to be arbitrarily long
+	err = enc.Encode(jsonObj)
+
+	return buf.Bytes(), err
 }
 
 // YAMLToJSON converts YAML to JSON. Since JSON is a subset of YAML,
@@ -107,15 +111,15 @@ func JSONToYAML(j []byte) ([]byte, error) {
 //   not use the !!binary tag in your YAML. This will ensure the original base64
 //   encoded data makes it all the way through to the JSON.
 //
-// For strict decoding of YAML, use YAMLToJSONStrict.
+// With the move to go-yaml/yaml/v3, all yaml decoding is strict.
 func YAMLToJSON(y []byte) ([]byte, error) {
-	return yamlToJSON(y, nil, yaml.Unmarshal)
+	return yamlToJSON(y, nil, yaml3.Unmarshal)
 }
 
-// YAMLToJSONStrict is like YAMLToJSON but enables strict YAML decoding,
-// returning an error on any duplicate field names.
+// YAMLToJSONStrict exactly duplicates the behavior of YAMLToJSON.
+// it remains for backwards compatibility.
 func YAMLToJSONStrict(y []byte) ([]byte, error) {
-	return yamlToJSON(y, nil, yaml.UnmarshalStrict)
+	return yamlToJSON(y, nil, yaml3.Unmarshal)
 }
 
 func yamlToJSON(y []byte, jsonTarget *reflect.Value, yamlUnmarshal func([]byte, interface{}) error) ([]byte, error) {
@@ -129,7 +133,7 @@ func yamlToJSON(y []byte, jsonTarget *reflect.Value, yamlUnmarshal func([]byte, 
 	// YAML objects are not completely compatible with JSON objects (e.g. you
 	// can have non-string keys in YAML). So, convert the YAML-compatible object
 	// to a JSON-compatible object, failing with an error if irrecoverable
-	// incompatibilties happen along the way.
+	// incompatibilities happen along the way.
 	jsonObj, err := convertToJSONableObject(yamlObj, jsonTarget)
 	if err != nil {
 		return nil, err
@@ -331,13 +335,13 @@ func convertToJSONableObject(yamlObj interface{}, jsonTarget *reflect.Value) (in
 // Big int/int64/uint64 do not lose precision as in the json-yaml roundtripping case.
 //
 // string, bool and any other types are unchanged.
-func JSONObjectToYAMLObject(j map[string]interface{}) yaml.MapSlice {
+func JSONObjectToYAMLObject(j map[string]interface{}) yaml2.MapSlice {
 	if len(j) == 0 {
 		return nil
 	}
-	ret := make(yaml.MapSlice, 0, len(j))
+	ret := make(yaml2.MapSlice, 0, len(j))
 	for k, v := range j {
-		ret = append(ret, yaml.MapItem{Key: k, Value: jsonToYAMLValue(v)})
+		ret = append(ret, yaml2.MapItem{Key: k, Value: jsonToYAMLValue(v)})
 	}
 	return ret
 }

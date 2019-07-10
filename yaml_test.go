@@ -10,30 +10,47 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	yaml "gopkg.in/yaml.v2"
+	yaml2 "gopkg.in/yaml.v2"
 )
 
 type MarshalTest struct {
 	A string
 	B int64
-	// Would like to test float64, but it's not supported in go-yaml.
-	// (See https://github.com/go-yaml/yaml/issues/83.)
 	C float32
+	D float64
 }
 
 func TestMarshal(t *testing.T) {
 	f32String := strconv.FormatFloat(math.MaxFloat32, 'g', -1, 32)
-	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat32}
-	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\n", math.MaxInt64, f32String))
+	f64String := strconv.FormatFloat(math.MaxFloat64, 'g', -1, 64)
+	s1 := MarshalTest{"a", math.MaxInt64, math.MaxFloat32, math.MaxFloat64}
+	e1 := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\nD: %s\n", math.MaxInt64, f32String, f64String))
 
-	y, err := Marshal(s)
+	y1, err := Marshal(s1)
 	if err != nil {
 		t.Errorf("error marshaling YAML: %v", err)
 	}
 
-	if !reflect.DeepEqual(y, e) {
+	if !reflect.DeepEqual(y1, e1) {
 		t.Errorf("marshal YAML was unsuccessful, expected: %#v, got: %#v",
-			string(e), string(y))
+			string(e1), string(y1))
+	}
+
+	longLine := "abcdefghijklmnopqrstuvwxyz"
+	for i := 0; i<5; i++ {
+		longLine = longLine + " " + longLine
+	}
+	s2 := map[string]interface{}{"idx":longLine}
+	e2 := []byte(fmt.Sprintf("idx: %s\n", longLine))
+
+	y2, err := Marshal(s2)
+	if err != nil {
+		t.Errorf("error marshaling YAML: %v", err)
+	}
+
+	if !reflect.DeepEqual(y2, e2) {
+		t.Errorf("marshal YAML was unsuccessful, expected: %#v, got: %#v",
+			string(e2), string(y2))
 	}
 }
 
@@ -109,6 +126,44 @@ b:
 		"b": &NamedThing{Name: "TestB"},
 	}
 	unmarshal(t, y, &s5, &e5)
+
+	// unmarshal should not fail for unknown fields
+	y = []byte(`
+name: TestC
+unknown: Some-Value
+`)
+	s6 := NamedThing{}
+	e6 := NamedThing{Name: "TestC"}
+	unmarshal(t, y, &s6, &e6)
+}
+
+func TestUnmarshalFails(t *testing.T) {
+	y := []byte("a: true\na: false")
+	s1 := UnmarshalString{}
+	unmarshalFail(t, y, &s1)
+
+	y = []byte("a:\n  - b: abc\n    c: 32\n      b: 123")
+	s2 := UnmarshalSlice{}
+	unmarshalFail(t, y, &s2)
+
+	y = []byte("a:\n  b: 1\n    c: 3")
+	s3 := UnmarshalStringMap{}
+	unmarshalFail(t, y, &s3)
+
+	type NamedThing struct {
+		Name string `json:"name"`
+		ID   string `json:"id"`
+	}
+	// When using unmarshal, we should see
+	// the unmarshal fail if there are multiple keys
+	y = []byte(`
+a:
+  name: TestA
+  id: ID-A
+  id: ID-1
+`)
+	s4 := NamedThing{}
+	unmarshalFail(t, y, &s4)
 }
 
 func unmarshal(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
@@ -120,6 +175,13 @@ func unmarshal(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
 	if !reflect.DeepEqual(s, e) {
 		t.Errorf("unmarshal YAML was unsuccessful, expected: %+#v, got: %+#v",
 			e, s)
+	}
+}
+
+func unmarshalFail(t *testing.T, y []byte, s interface{}, opts ...JSONOpt) {
+	err := Unmarshal(y, s, opts...)
+	if err == nil {
+		t.Errorf("no error unmarshaling YAML: %q", string(y))
 	}
 }
 
@@ -168,25 +230,7 @@ b:
 		"a": &NamedThing{Name: "TestA"},
 		"b": &NamedThing{Name: "TestB"},
 	}
-	unmarshal(t, y, &s5, &e5)
-
-	// When using not-so-strict unmarshal, we should
-	// be picking up the ID-1 as the value in the "id" field
-	y = []byte(`
-a:
-  name: TestA
-  id: ID-A
-  id: ID-1
-`)
-	type NamedThing2 struct {
-		Name string `json:"name"`
-		ID   string `json:"id"`
-	}
-	s6 := map[string]*NamedThing2{}
-	e6 := map[string]*NamedThing2{
-		"a": {Name: "TestA", ID: "ID-1"},
-	}
-	unmarshal(t, y, &s6, &e6)
+	unmarshalStrict(t, y, &s5, &e5)
 }
 
 func TestUnmarshalStrictFails(t *testing.T) {
@@ -242,7 +286,7 @@ func unmarshalStrict(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) 
 func unmarshalStrictFail(t *testing.T, y []byte, s interface{}, opts ...JSONOpt) {
 	err := UnmarshalStrict(y, s, opts...)
 	if err == nil {
-		t.Errorf("error unmarshaling YAML: %v", err)
+		t.Errorf("no error unmarshaling YAML: %q", string(y))
 	}
 }
 
@@ -419,8 +463,8 @@ func TestYAMLToJSONStrict(t *testing.T) {
 foo: bar
 foo: baz
 `
-	if _, err := YAMLToJSON([]byte(data)); err != nil {
-		t.Error("expected YAMLtoJSON to pass on duplicate field names")
+	if _, err := YAMLToJSON([]byte(data)); err == nil {
+		t.Error("expected YAMLtoJSON to fail on duplicate field names")
 	}
 	if _, err := YAMLToJSONStrict([]byte(data)); err == nil {
 		t.Error("expected YAMLtoJSONStrict to fail on duplicate field names")
@@ -438,10 +482,10 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    map[string]interface{}
-		expected yaml.MapSlice
+		expected yaml2.MapSlice
 	}{
-		{name: "nil", expected: yaml.MapSlice(nil)},
-		{name: "empty", input: map[string]interface{}{}, expected: yaml.MapSlice(nil)},
+		{name: "nil", expected: yaml2.MapSlice(nil)},
+		{name: "empty", input: map[string]interface{}{}, expected: yaml2.MapSlice(nil)},
 		{
 			name: "values",
 			input: map[string]interface{}{
@@ -461,11 +505,11 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 				"string":             string("foo"),
 				"uint64 big":         float64(math.Pow(2, 63)),
 			},
-			expected: yaml.MapSlice{
+			expected: yaml2.MapSlice{
 				{Key: "nil slice"},
 				{Key: "nil map"},
 				{Key: "empty slice", Value: []interface{}{}},
-				{Key: "empty map", Value: yaml.MapSlice(nil)},
+				{Key: "empty map", Value: yaml2.MapSlice(nil)},
 				{Key: "bool", Value: true},
 				{Key: "float64", Value: float64(42.1)},
 				{Key: "fractionless", Value: int(42)},
@@ -473,7 +517,7 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 				{Key: "int64", Value: int(42)},
 				{Key: "int64 big", Value: intOrInt64(int64(1) << 62)},
 				{Key: "negative int64 big", Value: intOrInt64(-(1 << 62))},
-				{Key: "map", Value: yaml.MapSlice{{Key: "foo", Value: "bar"}}},
+				{Key: "map", Value: yaml2.MapSlice{{Key: "foo", Value: "bar"}}},
 				{Key: "slice", Value: []interface{}{"foo", "bar"}},
 				{Key: "string", Value: string("foo")},
 				{Key: "uint64 big", Value: uint64(1) << 63},
@@ -493,12 +537,12 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected json.Marshal error: %v", err)
 			}
-			var gotByRoundtrip yaml.MapSlice
-			if err := yaml.Unmarshal(jsonBytes, &gotByRoundtrip); err != nil {
-				t.Fatalf("unexpected yaml.Unmarshal error: %v", err)
+			var gotByRoundtrip yaml2.MapSlice
+			if err := yaml2.Unmarshal(jsonBytes, &gotByRoundtrip); err != nil {
+				t.Fatalf("unexpected yaml2.Unmarshal error: %v", err)
 			}
 
-			// yaml.Unmarshal loses precision, it's rounding to the 4th last digit.
+			// yaml2.Unmarshal loses precision, it's rounding to the 4th last digit.
 			// Replicate this here in the test, but don't change the type.
 			for i := range got {
 				switch got[i].Key {
@@ -525,7 +569,7 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 			}
 
 			if !reflect.DeepEqual(got, gotByRoundtrip) {
-				t.Errorf("yaml.Unmarshal(json.Marshal(tt.input)) = %v, want %v\njson: %s", spew.Sdump(gotByRoundtrip), spew.Sdump(got), string(jsonBytes))
+				t.Errorf("yaml2.Unmarshal(json.Marshal(tt.input)) = %v, want %v\njson: %s", spew.Sdump(gotByRoundtrip), spew.Sdump(got), string(jsonBytes))
 			}
 		})
 	}
@@ -537,7 +581,7 @@ func sortMapSlicesInPlace(x interface{}) {
 		for i := range x {
 			sortMapSlicesInPlace(x[i])
 		}
-	case yaml.MapSlice:
+	case yaml2.MapSlice:
 		sort.Slice(x, func(a, b int) bool {
 			return x[a].Key.(string) < x[b].Key.(string)
 		})
