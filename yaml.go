@@ -93,7 +93,7 @@ func JSONToYAML(j []byte) ([]byte, error) {
 	// Marshal this object into YAML.
 	var buf bytes.Buffer
 	enc := yaml3.NewEncoder(&buf)
-	enc.SetIndent(2) // use an indentation length of 2
+	enc.SetIndent(2)      // use an indentation length of 2
 	enc.SetLineLength(-1) // allow lines to be arbitrarily long
 	err = enc.Encode(jsonObj)
 

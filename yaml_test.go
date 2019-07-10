@@ -37,10 +37,10 @@ func TestMarshal(t *testing.T) {
 	}
 
 	longLine := "abcdefghijklmnopqrstuvwxyz"
-	for i := 0; i<5; i++ {
+	for i := 0; i < 5; i++ {
 		longLine = longLine + " " + longLine
 	}
-	s2 := map[string]interface{}{"idx":longLine}
+	s2 := map[string]interface{}{"idx": longLine}
 	e2 := []byte(fmt.Sprintf("idx: %s\n", longLine))
 
 	y2, err := Marshal(s2)
