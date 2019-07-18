@@ -135,35 +135,40 @@ unknown: Some-Value
 	s6 := NamedThing{}
 	e6 := NamedThing{Name: "TestC"}
 	unmarshal(t, y, &s6, &e6)
-}
 
-func TestUnmarshalFails(t *testing.T) {
-	y := []byte("a: true\na: false")
-	s1 := UnmarshalString{}
-	unmarshalFail(t, y, &s1)
+	y = []byte("a: 1\na: 2")
+	s7 := UnmarshalString{}
+	e7 := UnmarshalString{A: "2"}
+	unmarshal(t, y, &s7, &e7)
 
-	y = []byte("a:\n  - b: abc\n    c: 32\n      b: 123")
-	s2 := UnmarshalSlice{}
-	unmarshalFail(t, y, &s2)
-
-	y = []byte("a:\n  b: 1\n    c: 3")
-	s3 := UnmarshalStringMap{}
-	unmarshalFail(t, y, &s3)
-
-	type NamedThing struct {
+	type NamedIDThing struct {
 		Name string `json:"name"`
 		ID   string `json:"id"`
 	}
-	// When using unmarshal, we should see
-	// the unmarshal fail if there are multiple keys
+	type AThing struct {
+		A NamedIDThing `json:"a"`
+	}
+	// When using unmarshal, we should see the unmarshal pass despite there
+	// being duplicate keys, and the value should be the last entry
 	y = []byte(`
 a:
   name: TestA
   id: ID-A
   id: ID-1
 `)
-	s4 := NamedThing{}
-	unmarshalFail(t, y, &s4)
+	s8 := AThing{}
+	e8 := AThing{A: NamedIDThing{Name: "TestA", ID: "ID-1"}}
+	unmarshal(t, y, &s8, &e8)
+}
+
+func TestUnmarshalFails(t *testing.T) {
+	y := []byte("a:\n  - b: abc\n    c: 32\n      b: 123")
+	s2 := UnmarshalSlice{}
+	unmarshalFail(t, y, &s2)
+
+	y = []byte("a:\n  b: 1\n    c: 3")
+	s3 := UnmarshalStringMap{}
+	unmarshalFail(t, y, &s3)
 }
 
 func unmarshal(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
@@ -463,8 +468,8 @@ func TestYAMLToJSONStrict(t *testing.T) {
 foo: bar
 foo: baz
 `
-	if _, err := YAMLToJSON([]byte(data)); err == nil {
-		t.Error("expected YAMLtoJSON to fail on duplicate field names")
+	if _, err := YAMLToJSON([]byte(data)); err != nil {
+		t.Error("expected YAMLtoJSON to pass on duplicate field names")
 	}
 	if _, err := YAMLToJSONStrict([]byte(data)); err == nil {
 		t.Error("expected YAMLtoJSONStrict to fail on duplicate field names")

@@ -34,20 +34,23 @@ type JSONOpt func(*json.Decoder) *json.Decoder
 // Unmarshal converts YAML to JSON then uses JSON to unmarshal into an object,
 // optionally configuring the behavior of the JSON unmarshal.
 func Unmarshal(y []byte, o interface{}, opts ...JSONOpt) error {
-	return yamlUnmarshal(y, o, opts...)
+	return yamlUnmarshal(y, o, false, opts...)
 }
 
 // UnmarshalStrict strictly converts YAML to JSON then uses JSON to unmarshal
 // into an object, optionally configuring the behavior of the JSON unmarshal.
 func UnmarshalStrict(y []byte, o interface{}, opts ...JSONOpt) error {
-	return yamlUnmarshal(y, o, append(opts, DisallowUnknownFields)...)
+	return yamlUnmarshal(y, o, true, append(opts, DisallowUnknownFields)...)
 }
 
 // yamlUnmarshal unmarshals the given YAML byte stream into the given interface,
 // optionally performing the unmarshalling strictly
-func yamlUnmarshal(y []byte, o interface{}, opts ...JSONOpt) error {
+func yamlUnmarshal(y []byte, o interface{}, strict bool, opts ...JSONOpt) error {
 	vo := reflect.ValueOf(o)
-	unmarshalFn := yaml3.Unmarshal
+	unmarshalFn := yaml3.UnmarshalPermissive
+	if strict {
+		unmarshalFn = yaml3.Unmarshal
+	}
 	j, err := yamlToJSON(y, &vo, unmarshalFn)
 	if err != nil {
 		return fmt.Errorf("error converting YAML to JSON: %v", err)
@@ -111,13 +114,13 @@ func JSONToYAML(j []byte) ([]byte, error) {
 //   not use the !!binary tag in your YAML. This will ensure the original base64
 //   encoded data makes it all the way through to the JSON.
 //
-// With the move to go-yaml/yaml/v3, all yaml decoding is strict.
+// For strict decoding of YAML, use YAMLToJSONStrict.
 func YAMLToJSON(y []byte) ([]byte, error) {
-	return yamlToJSON(y, nil, yaml3.Unmarshal)
+	return yamlToJSON(y, nil, yaml3.UnmarshalPermissive)
 }
 
-// YAMLToJSONStrict exactly duplicates the behavior of YAMLToJSON.
-// it remains for backwards compatibility.
+// YAMLToJSONStrict is like YAMLToJSON but enables strict YAML decoding,
+// returning an error on any duplicate field names.
 func YAMLToJSONStrict(y []byte) ([]byte, error) {
 	return yamlToJSON(y, nil, yaml3.Unmarshal)
 }
