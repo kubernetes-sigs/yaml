@@ -1,4 +1,8 @@
 language: go
+arch:
+  - amd64
+  - ppc64le
+
 dist: xenial
 go:
   - 1.12.x
@@ -7,7 +11,8 @@ script:
   - diff -u <(echo -n) <(gofmt -d *.go)
   - diff -u <(echo -n) <(golint $(go list -e ./...) | grep -v YAMLToJSON)
   - GO111MODULE=on go vet .
-  - GO111MODULE=on go test -v -race ./...
+  # race is not supported for ppc64le
+  - if [[ "$TRAVIS_CPU_ARCH" != "ppc64le" ]]; then GO111MODULE=on go test -v -race ./...; fi
   - git diff --exit-code
 install:
   - GO111MODULE=off go get golang.org/x/lint/golint
