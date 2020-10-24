@@ -1,12 +1,18 @@
 language: go
-arch:
-  - amd64
-  - ppc64le
+# arch:
+#   - amd64
+#   - ppc64le
 
 dist: xenial
 go:
   - 1.12.x
   - 1.13.x
+  
+jobs:
+  include:
+    - arch: ppc64le
+      go: 1.14.x
+
 script:
   - diff -u <(echo -n) <(gofmt -d *.go)
   - diff -u <(echo -n) <(golint $(go list -e ./...) | grep -v YAMLToJSON)
