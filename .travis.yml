@@ -11,7 +11,7 @@ go:
 jobs:
   include:
     - arch: ppc64le
-      go: 1.18.x
+      go: 1.15.x
 
 script:
   - diff -u <(echo -n) <(gofmt -d *.go)
