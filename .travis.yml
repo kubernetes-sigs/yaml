@@ -18,7 +18,8 @@ script:
   - diff -u <(echo -n) <(golint $(go list -e ./...) | grep -v YAMLToJSON)
   - GO111MODULE=on go vet .
   # race is not supported for ppc64le
-  - if [[ "$TRAVIS_CPU_ARCH" != "ppc64le" ]]; then GO111MODULE=on go test -v -race ./...; fi
+#   - if [[ "$TRAVIS_CPU_ARCH" != "ppc64le" ]]; then GO111MODULE=on go test -v -race ./...; fi
+  - GO111MODULE=on go test -v -race ./...
   - git diff --exit-code
 install:
   - GO111MODULE=off go get golang.org/x/lint/golint
