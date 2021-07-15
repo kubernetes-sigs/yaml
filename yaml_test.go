@@ -7,9 +7,11 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/google/go-cmp/cmp"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -61,6 +63,51 @@ type UnmarshalSlice struct {
 type NestedSlice struct {
 	B string
 	C *string
+}
+
+func TestRoundTrip(t *testing.T) {
+	type RoundTripTest struct {
+		A []string `json:"a,omitempty"`
+	}
+
+	tests := []struct {
+		content  string
+		expected RoundTripTest
+	}{
+		{
+			content:  `a: []`,
+			expected: RoundTripTest{A: []string{}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run("a", func(t *testing.T) {
+			// Unmarshal straight should pass
+			var got RoundTripTest
+			if err := Unmarshal([]byte(tc.content), &got); err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tc.expected, got); diff != "" {
+				t.Fatal("Failed unmarshal straight:\n\n", diff)
+			}
+
+			// Marshal then unmarshal and expect failure
+			marshalFromUnmarshal, err := Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tc.content, strings.TrimSpace(string(marshalFromUnmarshal))); diff != "" {
+				t.Error("Failed roundtrip: \n\n", diff)
+			}
+			var gotRoundtrip RoundTripTest
+			if err := Unmarshal([]byte(marshalFromUnmarshal), &gotRoundtrip); err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tc.expected, gotRoundtrip); diff != "" {
+				t.Fatal("Failed roundtrip:\n\n", diff)
+			}
+		})
+	}
 }
 
 func TestUnmarshal(t *testing.T) {
