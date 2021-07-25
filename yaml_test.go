@@ -50,6 +50,23 @@ type UnmarshalNestedString struct {
 	A NestedString
 }
 
+type UnmarshalInlinedString struct {
+	B NestedString `json:",inline" yaml:",inline"`
+}
+
+type NestedStringStructTags struct {
+	A string `json:"a" yaml:"a"`
+}
+
+type UnmarshalInlinedStringStructTags struct {
+	B NestedStringStructTags `json:",inline" yaml:",inline"`
+}
+
+type UnmarshalEmbeddedString struct {
+	NestedStringStructTags `json:",inline" yaml:",inline"`
+	B                      string
+}
+
 type NestedString struct {
 	A string
 }
@@ -109,6 +126,11 @@ b:
 		"b": &NamedThing{Name: "TestB"},
 	}
 	unmarshal(t, y, &s5, &e5)
+
+	y = []byte("a: 10\nb: 11\n")
+	s6 := UnmarshalEmbeddedString{}
+	e6 := UnmarshalEmbeddedString{NestedStringStructTags: NestedStringStructTags{A: "10"}, B: "11"}
+	unmarshal(t, y, &s6, &e6)
 }
 
 func unmarshal(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
@@ -187,6 +209,11 @@ a:
 		"a": {Name: "TestA", ID: "ID-1"},
 	}
 	unmarshal(t, y, &s6, &e6)
+
+	y = []byte("a: 12\nb: 13\n")
+	s7 := UnmarshalEmbeddedString{}
+	e7 := UnmarshalEmbeddedString{NestedStringStructTags: NestedStringStructTags{A: "12"}, B: "13"}
+	unmarshalStrict(t, y, &s7, &e7)
 }
 
 func TestUnmarshalStrictFails(t *testing.T) {
@@ -225,6 +252,24 @@ unknown: Some-Value
 `)
 	s5 := NamedThing{}
 	unmarshalStrictFail(t, y, &s5)
+
+	y = []byte("a: 10")
+	s6 := UnmarshalInlinedString{}
+	err := unmarshalStrictFail(t, y, &s6)
+	expected := "error unmarshaling JSON: while decoding JSON: json: unknown field \"a\""
+	got := fmt.Sprintf("%v", err)
+	if expected != got {
+		t.Fatalf("expected err to be %q, but got %q", expected, got)
+	}
+
+	y = []byte("a: 10")
+	s7 := UnmarshalInlinedStringStructTags{}
+	err = unmarshalStrictFail(t, y, &s7)
+	expected = "error unmarshaling JSON: while decoding JSON: json: unknown field \"a\""
+	got = fmt.Sprintf("%v", err)
+	if expected != got {
+		t.Fatalf("expected err to be %q, but got %q", expected, got)
+	}
 }
 
 func unmarshalStrict(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) {
@@ -239,11 +284,12 @@ func unmarshalStrict(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) 
 	}
 }
 
-func unmarshalStrictFail(t *testing.T, y []byte, s interface{}, opts ...JSONOpt) {
+func unmarshalStrictFail(t *testing.T, y []byte, s interface{}, opts ...JSONOpt) error {
 	err := UnmarshalStrict(y, s, opts...)
 	if err == nil {
 		t.Errorf("error unmarshaling YAML: %v", err)
 	}
+	return err
 }
 
 type Case struct {
