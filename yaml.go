@@ -233,9 +233,7 @@ func convertToJSONableObject(yamlObj interface{}, jsonTarget *reflect.Value) (in
 						}
 					}
 					if f != nil {
-						// Find the reflect.Value of the most preferential
-						// struct field.
-						jtf := t.Field(f.index[0])
+						jtf := getTarget(t, f)
 						strMap[keyString], err = convertToJSONableObject(v, &jtf)
 						if err != nil {
 							return nil, err
@@ -316,6 +314,17 @@ func convertToJSONableObject(yamlObj interface{}, jsonTarget *reflect.Value) (in
 		}
 		return yamlObj, nil
 	}
+}
+
+// getTarget gets the reflect.Value of the most preferential
+// struct field. If the field is a struct, this will recursively descend
+// into the definition.
+func getTarget(t reflect.Value, f *field) reflect.Value {
+	result := t
+	for _, i := range f.index {
+		result = result.Field(i)
+	}
+	return result
 }
 
 // JSONObjectToYAMLObject converts an in-memory JSON object into a YAML in-memory MapSlice,
