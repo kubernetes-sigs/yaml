@@ -242,7 +242,7 @@ func unmarshalStrict(t *testing.T, y []byte, s, e interface{}, opts ...JSONOpt) 
 func unmarshalStrictFail(t *testing.T, y []byte, s interface{}, opts ...JSONOpt) {
 	err := UnmarshalStrict(y, s, opts...)
 	if err == nil {
-		t.Errorf("error unmarshaling YAML: %v", err)
+		t.Errorf("expected strict unmarshalling to fail:\n%s", y)
 	}
 }
 
