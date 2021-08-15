@@ -11,7 +11,7 @@ type benchStruct struct {
 }
 
 func BenchmarkMarshal(b *testing.B) {
-	s := benchStruct {
+	s := benchStruct{
 		a: 5,
 		b: "foobar",
 		c: map[string]float32{
