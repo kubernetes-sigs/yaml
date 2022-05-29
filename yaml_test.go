@@ -17,16 +17,20 @@ limitations under the License.
 package yaml
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 /* Test helper functions */
@@ -58,6 +62,16 @@ var (
 
 	funcUnmarshalStrict testUnmarshalFunc = func(yamlBytes []byte, obj interface{}) error {
 		return UnmarshalStrict(yamlBytes, obj)
+	}
+
+	funcDecode testUnmarshalFunc = func(yamlBytes []byte, obj interface{}) error {
+		return NewDecoder(bytes.NewReader(yamlBytes)).Decode(obj)
+	}
+
+	funcDecodeStrict testUnmarshalFunc = func(yamlBytes []byte, obj interface{}) error {
+		decoder := NewDecoder(bytes.NewReader(yamlBytes))
+		decoder.SetStrict()
+		return decoder.Decode(obj)
 	}
 )
 
@@ -168,6 +182,43 @@ func testYAMLToJSON(t *testing.T, f testYAMLToJSONFunc, tests map[string]yamlToJ
 	}
 }
 
+type testMarshalFunc = func(obj interface{}) ([]byte, error)
+
+var (
+	funcMarshal testMarshalFunc = func(obj interface{}) ([]byte, error) {
+		return Marshal(obj)
+	}
+	funcEncode testMarshalFunc = func(obj interface{}) ([]byte, error) {
+		var buf bytes.Buffer
+		encoder := NewEncoder(&buf)
+		if err := encoder.Encode(obj); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	}
+)
+
+type marshalTestCase struct {
+	obj     interface{}
+	encoded []byte
+}
+
+func testMarshal(t *testing.T, f testMarshalFunc, tests map[string]marshalTestCase) {
+	for testName, test := range tests {
+		t.Run(testName, func(t *testing.T) {
+			y, err := f(test.obj)
+			if err != nil {
+				t.Errorf("error marshaling YAML: %v", err)
+			}
+
+			if !reflect.DeepEqual(y, test.encoded) {
+				t.Errorf("marshal YAML was unsuccessful, expected: %#v, got: %#v",
+					string(test.encoded), string(y))
+			}
+		})
+	}
+}
+
 /* Start tests */
 
 type MarshalTest struct {
@@ -180,18 +231,20 @@ type MarshalTest struct {
 
 func TestMarshal(t *testing.T) {
 	f32String := strconv.FormatFloat(math.MaxFloat32, 'g', -1, 32)
-	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat32}
-	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\n", math.MaxInt64, f32String))
-
-	y, err := Marshal(s)
-	if err != nil {
-		t.Errorf("error marshaling YAML: %v", err)
+	tests := map[string]marshalTestCase{
+		"max": {
+			obj:     MarshalTest{"a", math.MaxInt64, math.MaxFloat32},
+			encoded: []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\n", math.MaxInt64, f32String)),
+		},
 	}
 
-	if !reflect.DeepEqual(y, e) {
-		t.Errorf("marshal YAML was unsuccessful, expected: %#v, got: %#v",
-			string(e), string(y))
-	}
+	t.Run("Marshal", func(t *testing.T) {
+		testMarshal(t, funcMarshal, tests)
+	})
+
+	t.Run("Encode", func(t *testing.T) {
+		testMarshal(t, funcEncode, tests)
+	})
 }
 
 type UnmarshalUntaggedStruct struct {
@@ -550,6 +603,14 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("UnmarshalStrict", func(t *testing.T) {
 		testUnmarshal(t, funcUnmarshalStrict, tests)
 	})
+
+	t.Run("Decode", func(t *testing.T) {
+		testUnmarshal(t, funcDecode, tests)
+	})
+
+	t.Run("DecodeStrict", func(t *testing.T) {
+		testUnmarshal(t, funcDecodeStrict, tests)
+	})
 }
 
 func TestUnmarshalStrictFails(t *testing.T) {
@@ -617,6 +678,19 @@ func TestUnmarshalStrictFails(t *testing.T) {
 			failTests[name] = test
 		}
 		testUnmarshal(t, funcUnmarshalStrict, failTests)
+	})
+
+	t.Run("Decode", func(t *testing.T) {
+		testUnmarshal(t, funcDecode, tests)
+	})
+
+	t.Run("DecodeStrict", func(t *testing.T) {
+		failTests := map[string]unmarshalTestCase{}
+		for name, test := range tests {
+			test.err = fatalErrorsType
+			failTests[name] = test
+		}
+		testUnmarshal(t, funcDecodeStrict, failTests)
 	})
 }
 
@@ -888,5 +962,66 @@ func sortMapSlicesInPlace(x interface{}) {
 		sort.Slice(x, func(a, b int) bool {
 			return x[a].Key.(string) < x[b].Key.(string)
 		})
+	}
+}
+
+type MultiDoc struct {
+	Test int `json:"test"`
+}
+
+func TestMultiDocDecode(t *testing.T) {
+	data := `---
+test: 1
+---
+test: 2
+---
+test: 3
+`
+	decoder := NewDecoder(strings.NewReader(data))
+
+	for i := 1; i < 4; i++ {
+		var obj MultiDoc
+		if err := decoder.Decode(&obj); err != nil {
+			t.Errorf("decode #%d failed: %s", i, err)
+		}
+		if obj.Test != i {
+			t.Errorf("decoded #%d has incorrect value %#v", i, obj)
+		}
+	}
+	var obj MultiDoc
+	if err := decoder.Decode(&obj); !errors.Is(err, io.EOF) {
+		t.Errorf("decode should return EOF but got: %s", err)
+	}
+}
+
+func TestMultiDocEncode(t *testing.T) {
+	docs := []MultiDoc{
+		{
+			Test: 1,
+		},
+		{
+			Test: 2,
+		},
+		{
+			Test: 3,
+		},
+	}
+	expected := `test: 1
+---
+test: 2
+---
+test: 3
+`
+
+	var buf bytes.Buffer
+	encoder := NewEncoder(&buf)
+	for _, obj := range docs {
+		if err := encoder.Encode(obj); err != nil {
+			t.Errorf("encode object %#v failed: %s", obj, err)
+		}
+	}
+	if encoded := buf.String(); encoded != expected {
+		t.Errorf("expected %s, but got %s", expected, encoded)
+
 	}
 }

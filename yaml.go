@@ -161,7 +161,7 @@ func yamlToJSONTarget(yamlBytes []byte, jsonTarget *reflect.Value, unmarshalFn f
 	// YAML objects are not completely compatible with JSON objects (e.g. you
 	// can have non-string keys in YAML). So, convert the YAML-compatible object
 	// to a JSON-compatible object, failing with an error if irrecoverable
-	// incompatibilties happen along the way.
+	// incompatibilities happen along the way.
 	jsonObj, err := convertToJSONableObject(yamlObj, jsonTarget)
 	if err != nil {
 		return nil, fmt.Errorf("error converting YAML to JSON: %w", err)
@@ -413,4 +413,114 @@ func jsonToYAMLValue(j interface{}) interface{} {
 		return j
 	}
 	return j
+}
+
+// An Encoder writes YAML values to an output stream.
+type Encoder struct {
+	encoder *yaml.Encoder
+}
+
+// NewEncoder returns a new encoder that writes to w. The Encoder should be closed after use to flush all data to w.
+func NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{
+		encoder: yaml.NewEncoder(w),
+	}
+}
+
+// Encode writes the YAML encoding of obj to the stream.
+// If multiple items are encoded to the stream, the second and subsequent document will be preceded with a "---" document separator,
+// but the first will not.
+//
+// See the documentation for Marshal for details about the conversion of Go values to YAML.
+func (e *Encoder) Encode(obj interface{}) error {
+	var buf bytes.Buffer
+	// Convert an object to the JSON.
+	if err := json.NewEncoder(&buf).Encode(obj); err != nil {
+		return fmt.Errorf("error encode into JSON: %w", err)
+	}
+
+	// Convert the JSON to an object.
+	var j interface{}
+	// We are using yaml.Decoder.Decode here (instead of json.Decoder.Decode) because the
+	// Go JSON library doesn't try to pick the right number type (int, float,
+	// etc.) when unmarshalling to interface{}, it just picks float64
+	// universally. go-yaml does go through the effort of picking the right
+	// number type, so we can preserve number type throughout this process.
+	if err := yaml.NewDecoder(&buf).Decode(&j); err != nil {
+		return fmt.Errorf("error decode from JSON: %w", err)
+	}
+	// Marshal this object into YAML.
+	if err := e.encoder.Encode(j); err != nil {
+		return fmt.Errorf("error encode into YAML: %w", err)
+	}
+
+	return nil
+}
+
+// Close closes the encoder by writing any remaining data. It does not write a stream terminating string "...".
+func (e *Encoder) Close() (err error) {
+	if err := e.encoder.Close(); err != nil {
+		return fmt.Errorf("error closing encoder: %w", err)
+	}
+	return nil
+}
+
+// A Decoder reads and decodes YAML values from an input stream.
+type Decoder struct {
+	opts    []JSONOpt
+	decoder *yaml.Decoder
+}
+
+// NewDecoder returns a new decoder that reads from r.
+//
+// The decoder introduces its own buffering and may read data from r beyond the YAML values requested.
+//
+// Options for the standard library json.Decoder can be optionally specified, e.g. to decode untyped numbers into json.Number instead of float64,
+// or to disallow unknown fields (but for that purpose, see also UnmarshalStrict)
+func NewDecoder(r io.Reader, opts ...JSONOpt) *Decoder {
+	return &Decoder{
+		opts:    opts,
+		decoder: yaml.NewDecoder(r),
+	}
+}
+
+// Decode reads the next YAML-encoded value from its input and stores it in the value pointed to by obj.
+//
+// See the documentation for Unmarshal for details about the conversion of YAML into a Go value.
+func (dec *Decoder) Decode(obj interface{}) error {
+	jsonTarget := reflect.ValueOf(obj)
+
+	// Convert the YAML to an object.
+	var yamlObj interface{}
+	if err := dec.decoder.Decode(&yamlObj); err != nil {
+		return fmt.Errorf("error converting YAML to JSON: %w", err)
+	}
+
+	// YAML objects are not completely compatible with JSON objects (e.g. you
+	// can have non-string keys in YAML). So, convert the YAML-compatible object
+	// to a JSON-compatible object, failing with an error if irrecoverable
+	// incompatibilities happen along the way.
+	jsonObj, err := convertToJSONableObject(yamlObj, &jsonTarget)
+	if err != nil {
+		return fmt.Errorf("error converting YAML to JSON: %w", err)
+	}
+
+	// Convert this object to JSON
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(jsonObj); err != nil {
+		return fmt.Errorf("error converting YAML to JSON: %w", err)
+	}
+
+	if err := jsonUnmarshal(&buf, obj, dec.opts...); err != nil {
+		return fmt.Errorf("error unmarshaling JSON: %w", err)
+	}
+
+	return nil
+}
+
+// SetStrict sets whether strict decoding behaviour is enabled when decoding items in the data (see UnmarshalStrict).
+// By default, decoding is not strict. It also adds the DisallowUnknownFields option to json decoder.
+func (dec *Decoder) SetStrict() {
+	dec.decoder.SetStrict(true)
+	dec.opts = append(dec.opts, DisallowUnknownFields)
 }
