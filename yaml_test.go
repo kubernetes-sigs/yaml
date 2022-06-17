@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	yaml "gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v3"
 )
 
 /* Test helper functions */
