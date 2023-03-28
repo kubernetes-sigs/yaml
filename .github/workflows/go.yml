@@ -10,6 +10,7 @@ jobs:
     strategy:
       matrix: 
         go-versions: [1.16.x, 1.17.x, 1.18.x, 1.19.x]
+        dir: ['.', 'test']
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -21,11 +22,15 @@ jobs:
       run: GO111MODULE=off go get golang.org/x/lint/golint
     - name: Run gofmt
       run: diff -u <(echo -n) <(gofmt -d *.go)
+      working-directory: ${{ matrix.dir }}
     - name: Run golint
       run: diff -u <(echo -n) <(golint $(go list -e ./...) | grep -v YAMLToJSON)
+      working-directory: ${{ matrix.dir }}
     - name: Run go vet
       run: GO111MODULE=on go vet .
+      working-directory: ${{ matrix.dir }}
     - name: Run go test
       run: GO111MODULE=on go test -v -race ./...
+      working-directory: ${{ matrix.dir }}
     - name: Check diff
       run: git diff --exit-code

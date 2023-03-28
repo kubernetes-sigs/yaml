@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package yaml
+package test
 
 import (
 	"encoding/json"
@@ -27,6 +27,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	yaml "gopkg.in/yaml.v2"
+	kyaml "sigs.k8s.io/yaml"
 )
 
 /* Test helper functions */
@@ -53,11 +54,11 @@ type testUnmarshalFunc = func(yamlBytes []byte, obj interface{}) error
 
 var (
 	funcUnmarshal testUnmarshalFunc = func(yamlBytes []byte, obj interface{}) error {
-		return Unmarshal(yamlBytes, obj)
+		return kyaml.Unmarshal(yamlBytes, obj)
 	}
 
 	funcUnmarshalStrict testUnmarshalFunc = func(yamlBytes []byte, obj interface{}) error {
-		return UnmarshalStrict(yamlBytes, obj)
+		return kyaml.UnmarshalStrict(yamlBytes, obj)
 	}
 )
 
@@ -114,11 +115,11 @@ type testYAMLToJSONFunc = func(yamlBytes []byte) ([]byte, error)
 
 var (
 	funcYAMLToJSON testYAMLToJSONFunc = func(yamlBytes []byte) ([]byte, error) {
-		return YAMLToJSON(yamlBytes)
+		return kyaml.YAMLToJSON(yamlBytes)
 	}
 
 	funcYAMLToJSONStrict testYAMLToJSONFunc = func(yamlBytes []byte) ([]byte, error) {
-		return YAMLToJSONStrict(yamlBytes)
+		return kyaml.YAMLToJSONStrict(yamlBytes)
 	}
 )
 
@@ -147,7 +148,7 @@ func testYAMLToJSON(t *testing.T, f testYAMLToJSONFunc, tests map[string]yamlToJ
 
 		t.Run(fmt.Sprintf("%s_JSONToYAML", testName), func(t *testing.T) {
 			// Convert JSON to YAML
-			yamlBytes, err := JSONToYAML([]byte(test.json))
+			yamlBytes, err := kyaml.JSONToYAML([]byte(test.json))
 			if err != nil {
 				t.Errorf("Failed to convert JSON to YAML, json: `%s`, err: %v", test.json, err)
 			}
@@ -183,7 +184,7 @@ func TestMarshal(t *testing.T) {
 	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat32}
 	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\n", math.MaxInt64, f32String))
 
-	y, err := Marshal(s)
+	y, err := kyaml.Marshal(s)
 	if err != nil {
 		t.Errorf("error marshaling YAML: %v", err)
 	}
@@ -829,7 +830,7 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := JSONObjectToYAMLObject(tt.input)
+			got := kyaml.JSONObjectToYAMLObject(tt.input)
 			sortMapSlicesInPlace(tt.expected)
 			sortMapSlicesInPlace(got)
 			if !reflect.DeepEqual(tt.expected, got) {
