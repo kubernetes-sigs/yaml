@@ -274,7 +274,7 @@ func convertToJSONableObject(yamlObj interface{}, jsonTarget *reflect.Value) (in
 				// Stolen from go-yaml to use the same conversion to string as
 				// the go-yaml library uses to convert float to string when
 				// Marshaling.
-				s := strconv.FormatFloat(typedKey, 'g', -1, 32)
+				s := strconv.FormatFloat(typedKey, 'g', -1, 64)
 				switch s {
 				case "+Inf":
 					s = ".inf"
@@ -386,7 +386,7 @@ func convertToJSONableObject(yamlObj interface{}, jsonTarget *reflect.Value) (in
 			case int64:
 				s = strconv.FormatInt(typedVal, 10)
 			case float64:
-				s = strconv.FormatFloat(typedVal, 'g', -1, 32)
+				s = strconv.FormatFloat(typedVal, 'g', -1, 64)
 			case uint64:
 				s = strconv.FormatUint(typedVal, 10)
 			case bool:
