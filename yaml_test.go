@@ -175,15 +175,13 @@ func testYAMLToJSON(t *testing.T, f testYAMLToJSONFunc, tests map[string]yamlToJ
 type MarshalTest struct {
 	A string
 	B int64
-	// Would like to test float64, but it's not supported in go-yaml.
-	// (See https://github.com/go-yaml/yaml/issues/83.)
-	C float32
+	C float64
 }
 
 func TestMarshal(t *testing.T) {
-	f32String := strconv.FormatFloat(math.MaxFloat32, 'g', -1, 32)
-	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat32}
-	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\n", math.MaxInt64, f32String))
+	f64String := strconv.FormatFloat(math.MaxFloat64, 'g', -1, 64)
+	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat64}
+	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\n", math.MaxInt64, f64String))
 
 	y, err := Marshal(s)
 	if err != nil {
@@ -296,12 +294,12 @@ func TestUnmarshal(t *testing.T) {
 		"tagged casematched boolean key (yes)": {
 			encoded:    []byte("Yes: test"),
 			decodeInto: new(UnmarshalTaggedStruct),
-			decoded:    UnmarshalTaggedStruct{TrueLower: "test"},
+			decoded:    UnmarshalTaggedStruct{YesUpper: "test"},
 		},
 		"tagged non-casematched boolean key (yes)": {
 			encoded:    []byte("yes: test"),
 			decodeInto: new(UnmarshalTaggedStruct),
-			decoded:    UnmarshalTaggedStruct{TrueLower: "test"},
+			decoded:    UnmarshalTaggedStruct{YesLower: "test"},
 		},
 		"tagged integer key": {
 			encoded:    []byte("3: test"),
@@ -343,7 +341,7 @@ func TestUnmarshal(t *testing.T) {
 		"boolean value (no) into string field": {
 			encoded:    []byte("a: no"),
 			decodeInto: new(UnmarshalStruct),
-			decoded:    UnmarshalStruct{A: "false"},
+			decoded:    UnmarshalStruct{A: "no"},
 		},
 
 		// decode into complex fields
@@ -390,7 +388,7 @@ func TestUnmarshal(t *testing.T) {
 			encoded:    []byte("Yes:"),
 			decodeInto: new(map[string]struct{}),
 			decoded: map[string]struct{}{
-				"true": {},
+				"Yes": {},
 			},
 		},
 		"string map: decode integer key": {
@@ -639,8 +637,8 @@ func TestYAMLToJSON(t *testing.T) {
 		},
 		"boolean value (no)": {
 			yaml:                 "t: no\n",
-			json:                 `{"t":false}`,
-			yamlReverseOverwrite: strPtr("t: false\n"),
+			json:                 `{"t":"no"}`,
+			yamlReverseOverwrite: strPtr("t: \"no\"\n"),
 		},
 		"integer value (2^53 + 1)": {
 			yaml:                 "t: 9007199254740993\n",
@@ -653,8 +651,9 @@ func TestYAMLToJSON(t *testing.T) {
 			yamlReverseOverwrite: strPtr("t: 1e+36\n"),
 		},
 		"line-wrapped string value": {
-			yaml: "t: this is very long line with spaces and it must be longer than 80 so we will repeat\n  that it must be longer that 80\n",
-			json: `{"t":"this is very long line with spaces and it must be longer than 80 so we will repeat that it must be longer that 80"}`,
+			yaml:                 "t: this is very long line with spaces and it must be longer than 80 so we will repeat\n  that it must be longer that 80\n",
+			json:                 `{"t":"this is very long line with spaces and it must be longer than 80 so we will repeat that it must be longer that 80"}`,
+			yamlReverseOverwrite: strPtr(`t: this is very long line with spaces and it must be longer than 80 so we will repeat that it must be longer that 80` + "\n"),
 		},
 		"empty yaml value": {
 			yaml:                 "t: ",
@@ -668,8 +667,8 @@ func TestYAMLToJSON(t *testing.T) {
 		},
 		"boolean key (no)": {
 			yaml:                 "no: a",
-			json:                 `{"false":"a"}`,
-			yamlReverseOverwrite: strPtr("\"false\": a\n"),
+			json:                 `{"no":"a"}`,
+			yamlReverseOverwrite: strPtr("\"no\": a\n"),
 		},
 		"integer key": {
 			yaml:                 "1: a",
