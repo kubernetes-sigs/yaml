@@ -210,8 +210,6 @@ func typeFields(t reflect.Type) []field {
 		}
 	}
 
-	sort.Sort(byName(fields))
-
 	// Delete all fields that are hidden by the Go rules for embedded fields,
 	// except that fields with JSON tags are promoted.
 
