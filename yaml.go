@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"sigs.k8s.io/yaml/goyaml.v2"
+	yaml "sigs.k8s.io/yaml/goyaml.v2"
 )
 
 // Marshal marshals obj into JSON using stdlib json.Marshal, and then converts JSON to YAML using JSONToYAML (see that method for more reference)
@@ -187,7 +187,7 @@ func convertToJSONableObject(yamlObj interface{}, jsonTarget *reflect.Value) (in
 	// string.
 	if jsonTarget != nil {
 		jsonUnmarshaler, textUnmarshaler, pointerValue := indirect(*jsonTarget, false)
-		// We have a JSON or Text Umarshaler at this level, so we can't be trying
+		// We have a JSON or Text Unmarshaler at this level, so we can't be trying
 		// to decode into a string.
 		if jsonUnmarshaler != nil || textUnmarshaler != nil {
 			jsonTarget = nil
