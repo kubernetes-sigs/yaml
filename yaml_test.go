@@ -42,6 +42,7 @@ type errorType int
 const (
 	noErrorsType    errorType = 0
 	fatalErrorsType errorType = 1 << iota
+	notMatchedType
 )
 
 type unmarshalTestCase struct {
@@ -122,9 +123,17 @@ var (
 	funcYAMLToJSONStrict testYAMLToJSONFunc = func(yamlBytes []byte) ([]byte, error) {
 		return YAMLToJSONStrict(yamlBytes)
 	}
+
+	funcMultiYAMLv3ToJSON testYAMLToJSONFunc = func(yamlBytes []byte) ([]byte, error) {
+		return MultiYAMLToJSON(yamlBytes)
+	}
 )
 
-func testYAMLToJSON(t *testing.T, f testYAMLToJSONFunc, tests map[string]yamlToJSONTestcase) {
+func testYAMLToJSON(
+	t *testing.T,
+	f testYAMLToJSONFunc,
+	tests map[string]yamlToJSONTestcase,
+) {
 	for testName, test := range tests {
 		t.Run(fmt.Sprintf("%s_YAMLToJSON", testName), func(t *testing.T) {
 			// Convert Yaml to Json
@@ -150,6 +159,56 @@ func testYAMLToJSON(t *testing.T, f testYAMLToJSONFunc, tests map[string]yamlToJ
 		t.Run(fmt.Sprintf("%s_JSONToYAML", testName), func(t *testing.T) {
 			// Convert JSON to YAML
 			yamlBytes, err := JSONToYAML([]byte(test.json))
+			if err != nil {
+				t.Errorf("Failed to convert JSON to YAML, json: `%s`, err: %v", test.json, err)
+			}
+
+			// Set the string that we will compare the reversed output to.
+			correctYamlString := test.yaml
+
+			// If a special reverse string was specified, use that instead.
+			if test.yamlReverseOverwrite != nil {
+				correctYamlString = *test.yamlReverseOverwrite
+			}
+
+			// Check it against the expected output.
+			if string(yamlBytes) != correctYamlString {
+				t.Errorf("Failed to convert JSON to YAML, json: `%s`, expected yaml `%s`, got `%s`", test.json, correctYamlString, string(yamlBytes))
+			}
+		})
+	}
+}
+
+func testMultiYAMLToJSON(
+	t *testing.T,
+	f testYAMLToJSONFunc,
+	tests map[string]yamlToJSONTestcase,
+) {
+	for testName, test := range tests {
+		t.Run(fmt.Sprintf("%s_MultiYAMLToJSON", testName), func(t *testing.T) {
+			// Convert Yaml to Json
+			jsonBytes, err := f([]byte(test.yaml))
+			if err != nil && test.err == noErrorsType {
+				t.Errorf("Failed to convert YAML to JSON, yamlv3: `%s`, err: %v", test.yaml, err)
+			}
+			if err == nil && test.err&fatalErrorsType != 0 {
+				t.Errorf("expected a fatal error, but no fatal error was returned, yaml: `%s`", test.yaml)
+			}
+
+			if test.err&fatalErrorsType != 0 {
+				// Don't check output if error is fatal
+				return
+			}
+
+			// Check it against the expected output.
+			if string(jsonBytes) != test.json && (test.err != notMatchedType) {
+				t.Errorf("Failed to convert YAML to JSON, yaml: `%s`, expected json `%s`, got `%s`", test.yaml, test.json, string(jsonBytes))
+			}
+		})
+
+		t.Run(fmt.Sprintf("%s_MultiJSONToYAML", testName), func(t *testing.T) {
+			// Convert JSON to YAML
+			yamlBytes, err := MultiJSONToYAML([]byte(test.json))
 			if err != nil {
 				t.Errorf("Failed to convert JSON to YAML, json: `%s`, err: %v", test.json, err)
 			}
@@ -751,6 +810,136 @@ func TestYAMLToJSON(t *testing.T) {
 	})
 }
 
+func TestYAMLv3ToJSON(t *testing.T) {
+	v3Tests := map[string]yamlToJSONTestcase{
+		"string value": {
+			yaml: "t: a\n",
+			json: `{"t":"a"}`,
+		},
+		"null value": {
+			yaml: "t: null\n",
+			json: `{"t":null}`,
+		},
+		"boolean value": {
+			yaml:                 "t: True\n",
+			json:                 `{"t":true}`,
+			yamlReverseOverwrite: strPtr("t: true\n"),
+		},
+		"boolean value (no)": {
+			yaml: "t: \"no\"\n",
+			json: `{"t":"no"}`,
+		},
+		"integer value (2^53 + 1)": {
+			yaml:                 "t: 9007199254740993\n",
+			json:                 `{"t":9007199254740993}`,
+			yamlReverseOverwrite: strPtr("t: 9007199254740993\n"),
+		},
+		"integer value (1000000000000000000000000000000000000)": {
+			yaml:                 "t: 1000000000000000000000000000000000000\n",
+			json:                 `{"t":1e+36}`,
+			yamlReverseOverwrite: strPtr("t: 1e+36\n"),
+		},
+		"line-wrapped string value": {
+			yaml:                 "t: this is very long line with spaces and it must be longer than 80 so we will repeat\n  that it must be longer that 80\n",
+			json:                 `{"t":"this is very long line with spaces and it must be longer than 80 so we will repeat that it must be longer that 80"}`,
+			yamlReverseOverwrite: strPtr("t: this is very long line with spaces and it must be longer than 80 so we will repeat that it must be longer that 80\n"),
+		},
+		"empty yaml value": {
+			yaml:                 "t: ",
+			json:                 `{"t":null}`,
+			yamlReverseOverwrite: strPtr("t: null\n"),
+		},
+		"boolean key": {
+			yaml:                 "True: a",
+			json:                 `{"true":"a"}`,
+			yamlReverseOverwrite: strPtr("\"true\": a\n"),
+		},
+		"boolean key (no)": {
+			yaml:                 "no: a",
+			json:                 `{"no":"a"}`,
+			yamlReverseOverwrite: strPtr("\"no\": a\n"),
+		},
+		"integer key": {
+			yaml:                 "1: a",
+			json:                 `{"1":"a"}`,
+			yamlReverseOverwrite: strPtr("\"1\": a\n"),
+		},
+		"float key": {
+			yaml:                 "1.2: a",
+			json:                 `{"1.2":"a"}`,
+			yamlReverseOverwrite: strPtr("\"1.2\": a\n"),
+		},
+		"large integer key": {
+			yaml:                 "1000000000000000000000000000000000000: a",
+			json:                 `{"1e+36":"a"}`,
+			yamlReverseOverwrite: strPtr("\"1e+36\": a\n"),
+		},
+		"large integer key (scientific notation)": {
+			yaml:                 "1e+36: a",
+			json:                 `{"1e+36":"a"}`,
+			yamlReverseOverwrite: strPtr("\"1e+36\": a\n"),
+		},
+		"string key (large integer as string)": {
+			yaml: "\"1e+36\": a\n",
+			json: `{"1e+36":"a"}`,
+		},
+		"string key (float as string)": {
+			yaml: "\"1.2\": a\n",
+			json: `{"1.2":"a"}`,
+		},
+		"array": {
+			yaml: "- t: a\n",
+			json: `[{"t":"a"}]`,
+		},
+		"nested struct array": {
+			yaml: "- t: a\n- t:\n    b: 1\n    c: 2\n",
+			json: `[{"t":"a"},{"t":{"b":1,"c":2}}]`,
+		},
+		"nested struct array (json notation)": {
+			yaml:                 `[{t: a}, {t: {b: 1, c: 2}}]`,
+			json:                 `[{"t":"a"},{"t":{"b":1,"c":2}}]`,
+			yamlReverseOverwrite: strPtr("- t: a\n- t:\n    b: 1\n    c: 2\n"),
+		},
+		"empty struct value": {
+			yaml:                 "- t: ",
+			json:                 `[{"t":null}]`,
+			yamlReverseOverwrite: strPtr("- t: null\n"),
+		},
+		"null struct value": {
+			yaml: "- t: null\n",
+			json: `[{"t":null}]`,
+		},
+		"binary data": {
+			yaml:                 "a: !!binary gIGC",
+			json:                 `{"a":"\ufffd\ufffd\ufffd"}`,
+			yamlReverseOverwrite: strPtr("a: \ufffd\ufffd\ufffd\n"),
+		},
+
+		// Cases that should produce errors.
+		"~ key": {
+			yaml:                 "~: a",
+			json:                 `{"null":"a"}`,
+			yamlReverseOverwrite: strPtr("\"null\": a\n"),
+			err:                  fatalErrorsType,
+		},
+		"null key": {
+			yaml:                 "null: a",
+			json:                 `{"null":"a"}`,
+			yamlReverseOverwrite: strPtr("\"null\": a\n"),
+			err:                  fatalErrorsType,
+		},
+		"multi-directives": {
+			yaml:                 "a: b\n---\nc: d\n",
+			json:                 `[{"a":"b"},{"c":"d"}]`,
+			yamlReverseOverwrite: strPtr("- a: b\n- c: d\n"),
+		},
+	}
+
+	t.Run("YAMLv3ToJSON", func(t *testing.T) {
+		testMultiYAMLToJSON(t, funcMultiYAMLv3ToJSON, v3Tests)
+	})
+}
+
 func TestYAMLToJSONStrictFails(t *testing.T) {
 	tests := map[string]yamlToJSONTestcase{
 		// expect YAMLtoJSON to pass on duplicate field names
@@ -772,6 +961,45 @@ func TestYAMLToJSONStrictFails(t *testing.T) {
 			failTests[name] = test
 		}
 		testYAMLToJSON(t, funcYAMLToJSONStrict, failTests)
+	})
+
+	t.Run("YAMLv3ToJSON", func(t *testing.T) {
+		failTests := map[string]yamlToJSONTestcase{}
+		for name, test := range tests {
+			test.err = fatalErrorsType
+			failTests[name] = test
+		}
+		testMultiYAMLToJSON(t, funcMultiYAMLv3ToJSON, failTests)
+	})
+}
+
+func TestMultiYAMLToJSON(t *testing.T) {
+	tests := map[string]yamlToJSONTestcase{
+		"multi-directives": {
+			yaml:                 "---\n a: b\n---\n c: d\n",
+			json:                 `[{"a":"b"},{"c":"d"}]`,
+			yamlReverseOverwrite: strPtr("- a: b\n- c: d\n"),
+		},
+	}
+	t.Run("YAMLv3ToJSON", func(t *testing.T) {
+		testMultiYAMLToJSON(t, funcMultiYAMLv3ToJSON, tests)
+	})
+
+	t.Run("YAMLToJSON", func(t *testing.T) {
+		for name, test := range tests {
+			test.err = notMatchedType
+			tests[name] = test
+		}
+		testMultiYAMLToJSON(t, funcYAMLToJSON, tests)
+	})
+
+	t.Run("YAMLToJSONStrict", func(t *testing.T) {
+		failTests := map[string]yamlToJSONTestcase{}
+		for name, test := range tests {
+			test.err = notMatchedType
+			failTests[name] = test
+		}
+		testMultiYAMLToJSON(t, funcYAMLToJSONStrict, failTests)
 	})
 }
 
