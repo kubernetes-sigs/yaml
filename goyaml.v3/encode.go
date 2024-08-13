@@ -19,6 +19,7 @@ import (
 	"encoding"
 	"fmt"
 	"io"
+	"math/big"
 	"reflect"
 	"regexp"
 	"sort"
@@ -135,6 +136,9 @@ func (e *encoder) marshal(tag string, in reflect.Value) {
 		return
 	case time.Duration:
 		e.stringv(tag, reflect.ValueOf(value.String()))
+		return
+	case *big.Int:
+		e.bigintv(tag, reflect.ValueOf(value.String()))
 		return
 	case Marshaler:
 		v, err := value.MarshalYAML()
@@ -380,6 +384,12 @@ func (e *encoder) intv(tag string, in reflect.Value) {
 func (e *encoder) uintv(tag string, in reflect.Value) {
 	s := strconv.FormatUint(in.Uint(), 10)
 	e.emitScalar(s, "", tag, yaml_PLAIN_SCALAR_STYLE, nil, nil, nil, nil)
+}
+
+func (e *encoder) bigintv(tag string, in reflect.Value) {
+	value := &big.Int{}
+	s, _ := value.SetString(in.String(), 0)
+	e.emitScalar(s.String(), "", tag, yaml_PLAIN_SCALAR_STYLE, nil, nil, nil, nil)
 }
 
 func (e *encoder) timev(tag string, in reflect.Value) {

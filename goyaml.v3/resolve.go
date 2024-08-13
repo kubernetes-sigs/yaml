@@ -17,7 +17,9 @@ package yaml
 
 import (
 	"encoding/base64"
+	"errors"
 	"math"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -201,6 +203,17 @@ func resolve(tag string, in string) (rtag string, out interface{}) {
 			if err == nil {
 				return intTag, uintv
 			}
+
+			// If integer out of range, check if it's valid for bigger than 64 bytes
+			if errors.Is(err, strconv.ErrRange) {
+				value := &big.Int{}
+
+				result, ok := value.SetString(plain, 0)
+				if ok {
+					return intTag, result
+				}
+			}
+
 			if yamlStyleFloat.MatchString(plain) {
 				floatv, err := strconv.ParseFloat(plain, 64)
 				if err == nil {
