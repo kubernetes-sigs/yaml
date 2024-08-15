@@ -930,8 +930,8 @@ func TestYAMLv3ToJSON(t *testing.T) {
 		},
 		"multi-directives": {
 			yaml:                 "a: b\n---\nc: d\n",
-			json:                 `[{"a":"b"},{"c":"d"}]`,
-			yamlReverseOverwrite: strPtr("- a: b\n- c: d\n"),
+			json:                 `{"a":"b","c":"d"}`,
+			yamlReverseOverwrite: strPtr("a: b\nc: d\n"),
 		},
 	}
 
@@ -975,10 +975,15 @@ func TestYAMLToJSONStrictFails(t *testing.T) {
 
 func TestMultiYAMLToJSON(t *testing.T) {
 	tests := map[string]yamlToJSONTestcase{
-		"multi-directives": {
-			yaml:                 "---\n a: b\n---\n c: d\n",
-			json:                 `[{"a":"b"},{"c":"d"}]`,
-			yamlReverseOverwrite: strPtr("- a: b\n- c: d\n"),
+		"multi-directives-with-dashes": {
+			yaml:                 "---\na: b\n---\nc: d\n",
+			json:                 `{"a":"b","c":"d"}`,
+			yamlReverseOverwrite: strPtr("a: b\nc: d\n"),
+		},
+		"multi-directives-without-dashes": {
+			yaml:                 "a: b\nc: d\n",
+			json:                 `{"a":"b","c":"d"}`,
+			yamlReverseOverwrite: strPtr("a: b\nc: d\n"),
 		},
 	}
 	t.Run("YAMLv3ToJSON", func(t *testing.T) {

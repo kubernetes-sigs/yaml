@@ -216,24 +216,47 @@ func MultiYAMLToJSON(y []byte) ([]byte, error) {
 		// YAML objects are not completely compatible with JSON objects (e.g. you
 		// can have non-string keys in YAML). So, convert the YAML-compatible object
 		// to a JSON-compatible object, failing with an error if irrecoverable
-		// incompatibilties happen along the way.
+		// incompatibilities happen along the way.
 		jsonObj, err := convertToJSONableObject(yamlObj, nil)
 		if err != nil {
 			return nil, err
 		}
 		jsonObjs = append(jsonObjs, jsonObj)
 	}
-	// For compatibility with single YAML documents
-	// we should always trust single YAML as a single JSON object.
-	if len(jsonObjs) == 1 {
-		return json.Marshal(jsonObjs[0])
+	// since yaml doesn't allow define the same node key as well as json
+	// so we can merge the json objects into one
+	// which means we can easily handle the new directives with or without the dashes (both are valid per RFC)
+	unaryJSON, err := mergeJSONObjects(jsonObjs...)
+	if err != nil {
+		return nil, err
 	}
-	// Convert this object to JSON and return the data.
-	jsonBytes, err := json.Marshal(jsonObjs)
+	jsonBytes, err := json.Marshal(unaryJSON)
 	if err != nil {
 		return nil, err
 	}
 	return jsonBytes, nil
+}
+
+// mergeJSONObjects merges multiple JSON objects into a single JSON object.
+func mergeJSONObjects(jsonObjs ...interface{}) (interface{}, error) {
+	if len(jsonObjs) == 0 {
+		return nil, nil
+	}
+	if len(jsonObjs) == 1 {
+		return jsonObjs[0], nil
+	}
+	merged := make(map[string]interface{})
+	for _, jsonObj := range jsonObjs {
+		switch typedJSONObj := jsonObj.(type) {
+		case map[string]interface{}:
+			for k, v := range typedJSONObj {
+				merged[k] = v
+			}
+		default:
+			return nil, fmt.Errorf("unsupported JSON object type: %T", jsonObj)
+		}
+	}
+	return merged, nil
 }
 
 func yamlToJSONTarget(yamlBytes []byte, jsonTarget *reflect.Value, unmarshalFn func([]byte, interface{}) error) ([]byte, error) {
