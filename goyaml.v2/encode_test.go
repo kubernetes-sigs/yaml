@@ -12,7 +12,7 @@ import (
 	"os"
 
 	. "gopkg.in/check.v1"
-	"sigs.k8s.io/yaml/goyaml.v2"
+	yaml "sigs.k8s.io/yaml/goyaml.v2"
 )
 
 type jsonNumberT string
@@ -639,6 +639,40 @@ func (s *S) TestSortedOutput(c *C) {
 		}
 		last = index
 	}
+}
+
+func (s *S) TestQuotingMaintained(c *C) {
+	var buf bytes.Buffer
+	var yamlValue map[string]interface{}
+	const originalYaml = `data:
+    A1: "0x0000000000000000000000010000000000000000"
+    A2: "0x000000000000000000000000FFFFFFFFFFFFFFFF"
+    A3: "1234"
+    A4: 0x0000000000000000000000010000000000000000
+    A5: 0x000000000000000000000000FFFFFFFFFFFFFFFF
+    A6: 1234
+`
+	const outputYaml = `data:
+  A1: "0x0000000000000000000000010000000000000000"
+  A2: "0x000000000000000000000000FFFFFFFFFFFFFFFF"
+  A3: "1234"
+  A4: 18446744073709551616
+  A5: 18446744073709551615
+  A6: 1234
+`
+
+	dec := yaml.NewDecoder(strings.NewReader(originalYaml))
+	errDec := dec.Decode(&yamlValue)
+	c.Assert(errDec, IsNil)
+
+	enc := yaml.NewEncoder(&buf)
+	errEnc := enc.Encode(yamlValue)
+	c.Assert(errEnc, IsNil)
+
+	errClose := enc.Close()
+	c.Assert(errClose, IsNil)
+
+	c.Assert(buf.String(), Equals, outputYaml)
 }
 
 func newTime(t time.Time) *time.Time {

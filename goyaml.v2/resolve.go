@@ -2,7 +2,9 @@ package yaml
 
 import (
 	"encoding/base64"
+	"errors"
 	"math"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -148,16 +150,18 @@ func resolve(tag string, in string) (rtag string, out interface{}) {
 			}
 
 			plain := strings.Replace(in, "_", "", -1)
-			intv, err := strconv.ParseInt(plain, 0, 64)
-			if err == nil {
+
+			var intConvErr error
+			intv, intConvErr := strconv.ParseInt(plain, 0, 64)
+			if intConvErr == nil {
 				if intv == int64(int(intv)) {
 					return yaml_INT_TAG, int(intv)
 				} else {
 					return yaml_INT_TAG, intv
 				}
 			}
-			uintv, err := strconv.ParseUint(plain, 0, 64)
-			if err == nil {
+			uintv, intConvErr := strconv.ParseUint(plain, 0, 64)
+			if intConvErr == nil {
 				return yaml_INT_TAG, uintv
 			}
 			if yamlStyleFloat.MatchString(plain) {
@@ -187,6 +191,17 @@ func resolve(tag string, in string) (rtag string, out interface{}) {
 					} else {
 						return yaml_INT_TAG, intv
 					}
+				}
+			}
+
+			// If number out of range and doesn't fit any of the other cases,
+			// check if it's valid for bigger than 64 bytes
+			if errors.Is(intConvErr, strconv.ErrRange) {
+				value := &big.Int{}
+
+				bigintv, ok := value.SetString(plain, 0)
+				if ok {
+					return yaml_INT_TAG, bigintv
 				}
 			}
 		default:

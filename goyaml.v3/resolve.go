@@ -191,29 +191,20 @@ func resolve(tag string, in string) (rtag string, out interface{}) {
 			}
 
 			plain := strings.Replace(in, "_", "", -1)
-			intv, err := strconv.ParseInt(plain, 0, 64)
-			if err == nil {
+
+			var intConvErr error
+			intv, intConvErr := strconv.ParseInt(plain, 0, 64)
+			if intConvErr == nil {
 				if intv == int64(int(intv)) {
 					return intTag, int(intv)
 				} else {
 					return intTag, intv
 				}
 			}
-			uintv, err := strconv.ParseUint(plain, 0, 64)
-			if err == nil {
+			uintv, intConvErr := strconv.ParseUint(plain, 0, 64)
+			if intConvErr == nil {
 				return intTag, uintv
 			}
-
-			// If integer out of range, check if it's valid for bigger than 64 bytes
-			if errors.Is(err, strconv.ErrRange) {
-				value := &big.Int{}
-
-				result, ok := value.SetString(plain, 0)
-				if ok {
-					return intTag, result
-				}
-			}
-
 			if yamlStyleFloat.MatchString(plain) {
 				floatv, err := strconv.ParseFloat(plain, 64)
 				if err == nil {
@@ -268,6 +259,17 @@ func resolve(tag string, in string) (rtag string, out interface{}) {
 					} else {
 						return intTag, intv
 					}
+				}
+			}
+
+			// If number out of range and doesn't fit any of the other cases,
+			// check if it's valid for bigger than 64 bytes
+			if errors.Is(intConvErr, strconv.ErrRange) {
+				value := &big.Int{}
+
+				bigintv, ok := value.SetString(plain, 0)
+				if ok {
+					return intTag, bigintv
 				}
 			}
 		default:
