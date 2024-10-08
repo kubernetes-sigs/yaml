@@ -726,6 +726,31 @@ func TestYAMLToJSON(t *testing.T) {
 			json:                 `{"a":"\ufffd\ufffd\ufffd"}`,
 			yamlReverseOverwrite: strPtr("a: \ufffd\ufffd\ufffd\n"),
 		},
+		"small hex value": {
+			yaml:                 "key: 0x0001",
+			json:                 `{"key":1}`,
+			yamlReverseOverwrite: strPtr("key: 1\n"),
+		},
+		"hex value at the 64 byte mark": {
+			yaml:                 "key: 0x000000000000000000000000FFFFFFFFFFFFFFFF",
+			json:                 `{"key":18446744073709551615}`,
+			yamlReverseOverwrite: strPtr("key: 18446744073709551615\n"),
+		},
+		"hex value at the 64 byte mark in string format": {
+			yaml:                 "key: \"0x000000000000000000000000FFFFFFFFFFFFFFFF\"",
+			json:                 `{"key":"0x000000000000000000000000FFFFFFFFFFFFFFFF"}`,
+			yamlReverseOverwrite: strPtr("key: \"0x000000000000000000000000FFFFFFFFFFFFFFFF\"\n"),
+		},
+		"huge hex value bigger than 64 bytes": {
+			yaml:                 "key: 0x0000000000000000000000010000000000000000",
+			json:                 `{"key":18446744073709551616}`,
+			yamlReverseOverwrite: strPtr("key: 1.8446744073709552e+19\n"),
+		},
+		"huge hex value bigger than 64 bytes in string format": {
+			yaml:                 "key: \"0x0000000000000000000000010000000000000000\"",
+			json:                 `{"key":"0x0000000000000000000000010000000000000000"}`,
+			yamlReverseOverwrite: strPtr("key: \"0x0000000000000000000000010000000000000000\"\n"),
+		},
 
 		// Cases that should produce errors.
 		"~ key": {
@@ -809,6 +834,7 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 				"slice":              []interface{}{"foo", "bar"},
 				"string":             string("foo"),
 				"uint64 big":         bigUint64,
+				"big hex int":        "0x0000000000000000000000010000000000000000",
 			},
 			expected: yamlv2.MapSlice{
 				{Key: "nil slice"},
@@ -826,6 +852,7 @@ func TestJSONObjectToYAMLObject(t *testing.T) {
 				{Key: "slice", Value: []interface{}{"foo", "bar"}},
 				{Key: "string", Value: string("foo")},
 				{Key: "uint64 big", Value: bigUint64},
+				{Key: "big hex int", Value: "0x0000000000000000000000010000000000000000"},
 			},
 		},
 	}
