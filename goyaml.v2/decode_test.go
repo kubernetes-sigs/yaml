@@ -131,7 +131,7 @@ var unmarshalTests = []struct {
 		map[string]interface{}{"bin": -42},
 	}, {
 		"bin: -0b1000000000000000000000000000000000000000000000000000000000000000",
-		map[string]interface{}{"bin": -9223372036854775808},
+		map[string]interface{}{"bin": int64(-9223372036854775808)},
 	}, {
 		"decimal: +685_230",
 		map[string]int{"decimal": 685230},
