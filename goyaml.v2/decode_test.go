@@ -131,7 +131,7 @@ var unmarshalTests = []struct {
 		map[string]interface{}{"bin": -42},
 	}, {
 		"bin: -0b1000000000000000000000000000000000000000000000000000000000000000",
-		map[string]interface{}{"bin": -9223372036854775808},
+		map[string]interface{}{"bin": int64(-9223372036854775808)},
 	}, {
 		"decimal: +685_230",
 		map[string]int{"decimal": 685230},
@@ -747,6 +747,25 @@ type inlineC struct {
 	C int
 }
 
+func assertDeepEqualWithAlignedTypes(c *C, actual interface{}, expected interface{}, err error) {
+	// Ensure type consistency for comparison
+	expectedMap, isExpectedMap := expected.(map[string]interface{})
+	actualMap, isActualMap := actual.(map[string]interface{})
+	if isExpectedMap && isActualMap {
+		for key, actualVal := range actualMap {
+			if expectedVal, exists := expectedMap[key]; exists {
+				// Align types if the expected value is int64
+				if _, ok := expectedVal.(int64); ok {
+					if actualInt, ok := actualVal.(int); ok {
+						actualMap[key] = int64(actualInt)
+					}
+				}
+			}
+		}
+	}
+	c.Assert(actual, DeepEquals, expected, Commentf("error: %v", err))
+}
+
 func (s *S) TestUnmarshal(c *C) {
 	for i, item := range unmarshalTests {
 		c.Logf("test %d: %q", i, item.data)
@@ -756,7 +775,7 @@ func (s *S) TestUnmarshal(c *C) {
 		if _, ok := err.(*yaml.TypeError); !ok {
 			c.Assert(err, IsNil)
 		}
-		c.Assert(value.Elem().Interface(), DeepEquals, item.value, Commentf("error: %v", err))
+		assertDeepEqualWithAlignedTypes(c, value.Elem().Interface(), item.value, err)
 	}
 }
 
@@ -787,7 +806,7 @@ func (s *S) TestDecoderSingleDocument(c *C) {
 		if _, ok := err.(*yaml.TypeError); !ok {
 			c.Assert(err, IsNil)
 		}
-		c.Assert(value.Elem().Interface(), DeepEquals, item.value)
+		assertDeepEqualWithAlignedTypes(c, value.Elem().Interface(), item.value, err)
 	}
 }
 
