@@ -18,6 +18,7 @@ package yaml_test
 
 import (
 	"bytes"
+	"testing"
 
 	. "gopkg.in/check.v1"
 	yaml "sigs.k8s.io/yaml/goyaml.v3"
@@ -157,4 +158,20 @@ func (s *S) TestNewLinePreserved(c *C) {
 	c.Assert(err, IsNil)
 	// the newline at the start of the file should be preserved
 	c.Assert(string(data), Equals, "_: |4\n\n    a:\n            b:\n                    c: d\n")
+}
+
+func TestIssue117(t *testing.T) {
+	data := []byte(`
+a:
+<<:
+-
+?
+-
+`)
+
+	x := map[string]interface{}{}
+	err := yaml.Unmarshal([]byte(data), &x)
+	if err == nil {
+		t.Errorf("expected error, got none")
+	}
 }
