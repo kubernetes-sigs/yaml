@@ -24,7 +24,8 @@ import (
 	"reflect"
 	"strconv"
 
-	"sigs.k8s.io/yaml/goyaml.v2"
+	yaml "sigs.k8s.io/yaml/goyaml.v2"
+	yamlv3 "sigs.k8s.io/yaml/goyaml.v3"
 )
 
 // Marshal marshals obj into JSON using stdlib json.Marshal, and then converts JSON to YAML using JSONToYAML (see that method for more reference)
@@ -125,6 +126,52 @@ func JSONToYAML(j []byte) ([]byte, error) {
 	return yamlBytes, nil
 }
 
+type jsonStreamReader struct {
+	r   io.Reader
+	buf *bytes.Buffer
+}
+
+func (r *jsonStreamReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 {
+		r.buf.Write(p[:n])
+	}
+	return n, err
+}
+
+func (r *jsonStreamReader) BytesRead() []byte {
+	return r.buf.Bytes()
+}
+
+func MultiJSONToYAML(j []byte) ([]byte, error) {
+	sr := &jsonStreamReader{
+		r:   bytes.NewReader(j),
+		buf: bytes.NewBuffer(nil),
+	}
+	dec := json.NewDecoder(sr)
+	jsonBytes := bytes.NewBuffer(nil)
+	for {
+		var noOp interface{}
+		err := dec.Decode(&noOp)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		var jsonObj interface{}
+		if err := yamlv3.Unmarshal(sr.BytesRead(), &jsonObj); err != nil {
+			return nil, err
+		}
+		yb, err := yamlv3.Marshal(jsonObj)
+		if err != nil {
+			return nil, err
+		}
+		jsonBytes.Write(yb)
+	}
+	return jsonBytes.Bytes(), nil
+}
+
 // YAMLToJSON converts YAML to JSON. Since JSON is a subset of YAML,
 // passing JSON through this method should be a no-op.
 //
@@ -151,6 +198,65 @@ func YAMLToJSON(y []byte) ([]byte, error) {
 // returning an error on any duplicate field names.
 func YAMLToJSONStrict(y []byte) ([]byte, error) {
 	return yamlToJSONTarget(y, nil, yaml.UnmarshalStrict)
+}
+
+// MultiYAMLToJSON converts YAML to JSON using the go-yaml v3 library using the decoding-style.
+// Which supports more YAML features than the yamlv3.Unmarshal. Including parsing the multi-document YAML.
+// Also see [go-yaml #232](https://github.com/go-yaml/yaml/issues/232) for details
+func MultiYAMLToJSON(y []byte) ([]byte, error) {
+	dec := yamlv3.NewDecoder(bytes.NewReader(y))
+	var jsonObjs []interface{}
+	for {
+		var yamlObj interface{}
+		if err := dec.Decode(&yamlObj); err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+		// YAML objects are not completely compatible with JSON objects (e.g. you
+		// can have non-string keys in YAML). So, convert the YAML-compatible object
+		// to a JSON-compatible object, failing with an error if irrecoverable
+		// incompatibilities happen along the way.
+		jsonObj, err := convertToJSONableObject(yamlObj, nil)
+		if err != nil {
+			return nil, err
+		}
+		jsonObjs = append(jsonObjs, jsonObj)
+	}
+	// since yaml doesn't allow define the same node key as well as json
+	// so we can merge the json objects into one
+	// which means we can easily handle the new directives with or without the dashes (both are valid per RFC)
+	unaryJSON, err := mergeJSONObjects(jsonObjs...)
+	if err != nil {
+		return nil, err
+	}
+	jsonBytes, err := json.Marshal(unaryJSON)
+	if err != nil {
+		return nil, err
+	}
+	return jsonBytes, nil
+}
+
+// mergeJSONObjects merges multiple JSON objects into a single JSON object.
+func mergeJSONObjects(jsonObjs ...interface{}) (interface{}, error) {
+	if len(jsonObjs) == 0 {
+		return nil, nil
+	}
+	if len(jsonObjs) == 1 {
+		return jsonObjs[0], nil
+	}
+	merged := make(map[string]interface{})
+	for _, jsonObj := range jsonObjs {
+		switch typedJSONObj := jsonObj.(type) {
+		case map[string]interface{}:
+			for k, v := range typedJSONObj {
+				merged[k] = v
+			}
+		default:
+			return nil, fmt.Errorf("unsupported JSON object type: %T", jsonObj)
+		}
+	}
+	return merged, nil
 }
 
 func yamlToJSONTarget(yamlBytes []byte, jsonTarget *reflect.Value, unmarshalFn func([]byte, interface{}) error) ([]byte, error) {
