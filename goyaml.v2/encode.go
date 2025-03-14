@@ -4,6 +4,7 @@ import (
 	"encoding"
 	"fmt"
 	"io"
+	"math/big"
 	"reflect"
 	"regexp"
 	"sort"
@@ -122,6 +123,9 @@ func (e *encoder) marshal(tag string, in reflect.Value) {
 		// we don't want to treat it as a string for YAML
 		// purposes because YAML has special support for
 		// timestamps.
+	case *big.Int:
+		e.bigintv(tag, reflect.ValueOf(m.String()))
+		return
 	case Marshaler:
 		v, err := m.MarshalYAML()
 		if err != nil {
@@ -352,6 +356,12 @@ func (e *encoder) intv(tag string, in reflect.Value) {
 func (e *encoder) uintv(tag string, in reflect.Value) {
 	s := strconv.FormatUint(in.Uint(), 10)
 	e.emitScalar(s, "", tag, yaml_PLAIN_SCALAR_STYLE)
+}
+
+func (e *encoder) bigintv(tag string, in reflect.Value) {
+	value := &big.Int{}
+	s, _ := value.SetString(in.String(), 0)
+	e.emitScalar(s.String(), "", tag, yaml_PLAIN_SCALAR_STYLE)
 }
 
 func (e *encoder) timev(tag string, in reflect.Value) {
