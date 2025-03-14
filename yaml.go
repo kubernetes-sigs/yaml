@@ -92,7 +92,7 @@ func jsonUnmarshal(reader io.Reader, obj interface{}, opts ...JSONOpt) error {
 		d = opt(d)
 	}
 	if err := d.Decode(&obj); err != nil {
-		return fmt.Errorf("while decoding JSON: %v", err)
+		return fmt.Errorf("while decoding JSON: %w", err)
 	}
 	return nil
 }
