@@ -175,3 +175,17 @@ a:
 		t.Errorf("expected error, got none")
 	}
 }
+
+func (s *S) TestSetWidth(c *C) {
+	longString := "this is very long line with spaces and it must be longer than 80 so we will repeat that it must be longer that 80"
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	enc.SetWidth(80)
+	err := enc.Encode(map[string]interface{}{"a": longString})
+	c.Assert(err, Equals, nil)
+	err = enc.Close()
+	c.Assert(err, Equals, nil)
+	c.Assert(buf.String(), Equals, "a: this is very long line with spaces and it must be longer than 80 so we will repeat\n  that it must be longer that 80\n")
+}

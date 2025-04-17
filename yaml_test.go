@@ -175,15 +175,13 @@ func testYAMLToJSON(t *testing.T, f testYAMLToJSONFunc, tests map[string]yamlToJ
 type MarshalTest struct {
 	A string
 	B int64
-	// Would like to test float64, but it's not supported in go-yaml.
-	// (See https://github.com/go-yaml/yaml/issues/83.)
-	C float32
+	C float64
 }
 
 func TestMarshal(t *testing.T) {
-	f32String := strconv.FormatFloat(math.MaxFloat32, 'g', -1, 32)
-	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat32}
-	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\n", math.MaxInt64, f32String))
+	f64String := strconv.FormatFloat(math.MaxFloat64, 'g', -1, 64)
+	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat64}
+	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\n", math.MaxInt64, f64String))
 
 	y, err := Marshal(s)
 	if err != nil {
@@ -213,6 +211,8 @@ type UnmarshalTaggedStruct struct {
 	IntBig2           string `json:"1000000000000000000000000000000000000"`
 	IntBig2Scientific string `json:"1e+36"`
 	Float3dot3        string `json:"3.3"`
+	FloatMax32        string `json:"3.4028234663852886e+38"`
+	FloatMax64        string `json:"1.7976931348623157e+308"`
 }
 
 type UnmarshalStruct struct {
@@ -296,12 +296,12 @@ func TestUnmarshal(t *testing.T) {
 		"tagged casematched boolean key (yes)": {
 			encoded:    []byte("Yes: test"),
 			decodeInto: new(UnmarshalTaggedStruct),
-			decoded:    UnmarshalTaggedStruct{TrueLower: "test"},
+			decoded:    UnmarshalTaggedStruct{YesUpper: "test"}, // In yamlv2, this incorrectly set the TrueLower field instead
 		},
 		"tagged non-casematched boolean key (yes)": {
 			encoded:    []byte("yes: test"),
 			decodeInto: new(UnmarshalTaggedStruct),
-			decoded:    UnmarshalTaggedStruct{TrueLower: "test"},
+			decoded:    UnmarshalTaggedStruct{YesLower: "test"}, // In yamlv2, this incorrectly set the TrueLower field instead
 		},
 		"tagged integer key": {
 			encoded:    []byte("3: test"),
@@ -323,6 +323,16 @@ func TestUnmarshal(t *testing.T) {
 			decodeInto: new(UnmarshalTaggedStruct),
 			decoded:    UnmarshalTaggedStruct{Float3dot3: "test"},
 		},
+		"tagged max float32 key": {
+			encoded:    []byte("3.4028234663852886e+38: test"),
+			decodeInto: new(UnmarshalTaggedStruct),
+			decoded:    UnmarshalTaggedStruct{FloatMax32: "test"},
+		},
+		"tagged max float64 key": {
+			encoded:    []byte("1.7976931348623157e+308: test"),
+			decodeInto: new(UnmarshalTaggedStruct),
+			decoded:    UnmarshalTaggedStruct{FloatMax64: "test"},
+		},
 
 		// decode into string field
 		"string value into string field": {
@@ -343,7 +353,7 @@ func TestUnmarshal(t *testing.T) {
 		"boolean value (no) into string field": {
 			encoded:    []byte("a: no"),
 			decodeInto: new(UnmarshalStruct),
-			decoded:    UnmarshalStruct{A: "false"},
+			decoded:    UnmarshalStruct{A: "no"}, // In yamlv2, this incorrectly set the value to "false"
 		},
 
 		// decode into complex fields
@@ -390,7 +400,7 @@ func TestUnmarshal(t *testing.T) {
 			encoded:    []byte("Yes:"),
 			decodeInto: new(map[string]struct{}),
 			decoded: map[string]struct{}{
-				"true": {},
+				"Yes": {}, // In yamlv2, this incorrectly set the key to "true"
 			},
 		},
 		"string map: decode integer key": {
@@ -438,6 +448,38 @@ func TestUnmarshal(t *testing.T) {
 				"a": "",
 				"b": nil,
 			},
+		},
+
+		// decoding floats
+		"decode max float32 into float32": {
+			encoded:    []byte("3.4028234663852886e+38"),
+			decodeInto: new(float32),
+			decoded:    float32(math.MaxFloat32),
+		},
+		"decode max float32 into interface": {
+			encoded:    []byte("3.4028234663852886e+38"),
+			decodeInto: new(interface{}),
+			decoded:    float64(math.MaxFloat32),
+		},
+		"decode max float32 into string": {
+			encoded:    []byte("3.4028234663852886e+38"),
+			decodeInto: new(string),
+			decoded:    "3.4028234663852886e+38",
+		},
+		"decode max float64 into float64": {
+			encoded:    []byte("1.7976931348623157e+308"),
+			decodeInto: new(float64),
+			decoded:    math.MaxFloat64,
+		},
+		"decode max float64 into interface": {
+			encoded:    []byte("1.7976931348623157e+308"),
+			decodeInto: new(interface{}),
+			decoded:    math.MaxFloat64,
+		},
+		"decode max float64 into string": {
+			encoded:    []byte("1.7976931348623157e+308"),
+			decodeInto: new(string),
+			decoded:    "1.7976931348623157e+308",
 		},
 
 		// duplicate (non-casematched) keys (NOTE: this is very non-ideal behaviour!)
@@ -639,8 +681,8 @@ func TestYAMLToJSON(t *testing.T) {
 		},
 		"boolean value (no)": {
 			yaml:                 "t: no\n",
-			json:                 `{"t":false}`,
-			yamlReverseOverwrite: strPtr("t: false\n"),
+			json:                 `{"t":"no"}`, // In yamlv2, this was interpreted as the boolean false
+			yamlReverseOverwrite: strPtr("t: \"no\"\n"),
 		},
 		"integer value (2^53 + 1)": {
 			yaml:                 "t: 9007199254740993\n",
@@ -668,8 +710,8 @@ func TestYAMLToJSON(t *testing.T) {
 		},
 		"boolean key (no)": {
 			yaml:                 "no: a",
-			json:                 `{"false":"a"}`,
-			yamlReverseOverwrite: strPtr("\"false\": a\n"),
+			json:                 `{"no":"a"}`, // In yamlv2, this was incorrectly converted to "false"
+			yamlReverseOverwrite: strPtr("\"no\": a\n"),
 		},
 		"integer key": {
 			yaml:                 "1: a",

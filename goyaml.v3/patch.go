@@ -37,3 +37,7 @@ func (e *Encoder) DefaultSeqIndent() {
 func yaml_emitter_process_line_comment(emitter *yaml_emitter_t) bool {
 	return yaml_emitter_process_line_comment_linebreak(emitter, false)
 }
+
+func (e *Encoder) SetWidth(width int) {
+	yaml_emitter_set_width(&e.encoder.emitter, width)
+}
