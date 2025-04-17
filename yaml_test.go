@@ -296,12 +296,12 @@ func TestUnmarshal(t *testing.T) {
 		"tagged casematched boolean key (yes)": {
 			encoded:    []byte("Yes: test"),
 			decodeInto: new(UnmarshalTaggedStruct),
-			decoded:    UnmarshalTaggedStruct{TrueLower: "test"},
+			decoded:    UnmarshalTaggedStruct{YesUpper: "test"}, // In yamlv2, this incorrectly set the TrueLower field instead
 		},
 		"tagged non-casematched boolean key (yes)": {
 			encoded:    []byte("yes: test"),
 			decodeInto: new(UnmarshalTaggedStruct),
-			decoded:    UnmarshalTaggedStruct{TrueLower: "test"},
+			decoded:    UnmarshalTaggedStruct{YesLower: "test"}, // In yamlv2, this incorrectly set the TrueLower field instead
 		},
 		"tagged integer key": {
 			encoded:    []byte("3: test"),
@@ -343,7 +343,7 @@ func TestUnmarshal(t *testing.T) {
 		"boolean value (no) into string field": {
 			encoded:    []byte("a: no"),
 			decodeInto: new(UnmarshalStruct),
-			decoded:    UnmarshalStruct{A: "false"},
+			decoded:    UnmarshalStruct{A: "no"}, // In yamlv2, this incorrectly set the value to "false"
 		},
 
 		// decode into complex fields
@@ -390,7 +390,7 @@ func TestUnmarshal(t *testing.T) {
 			encoded:    []byte("Yes:"),
 			decodeInto: new(map[string]struct{}),
 			decoded: map[string]struct{}{
-				"true": {},
+				"Yes": {}, // In yamlv2, this incorrectly set the key to "true"
 			},
 		},
 		"string map: decode integer key": {
@@ -639,8 +639,8 @@ func TestYAMLToJSON(t *testing.T) {
 		},
 		"boolean value (no)": {
 			yaml:                 "t: no\n",
-			json:                 `{"t":false}`,
-			yamlReverseOverwrite: strPtr("t: false\n"),
+			json:                 `{"t":"no"}`, // In yamlv2, this was interpreted as the boolean false
+			yamlReverseOverwrite: strPtr("t: \"no\"\n"),
 		},
 		"integer value (2^53 + 1)": {
 			yaml:                 "t: 9007199254740993\n",
@@ -668,8 +668,8 @@ func TestYAMLToJSON(t *testing.T) {
 		},
 		"boolean key (no)": {
 			yaml:                 "no: a",
-			json:                 `{"false":"a"}`,
-			yamlReverseOverwrite: strPtr("\"false\": a\n"),
+			json:                 `{"no":"a"}`, // In yamlv2, this was incorrectly converted to "false"
+			yamlReverseOverwrite: strPtr("\"no\": a\n"),
 		},
 		"integer key": {
 			yaml:                 "1: a",
