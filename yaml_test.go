@@ -211,6 +211,8 @@ type UnmarshalTaggedStruct struct {
 	IntBig2           string `json:"1000000000000000000000000000000000000"`
 	IntBig2Scientific string `json:"1e+36"`
 	Float3dot3        string `json:"3.3"`
+	FloatMax32        string `json:"3.4028234663852886e+38"`
+	FloatMax64        string `json:"1.7976931348623157e+308"`
 }
 
 type UnmarshalStruct struct {
@@ -320,6 +322,16 @@ func TestUnmarshal(t *testing.T) {
 			encoded:    []byte("3.3: test"),
 			decodeInto: new(UnmarshalTaggedStruct),
 			decoded:    UnmarshalTaggedStruct{Float3dot3: "test"},
+		},
+		"tagged max float32 key": {
+			encoded:    []byte("3.4028234663852886e+38: test"),
+			decodeInto: new(UnmarshalTaggedStruct),
+			decoded:    UnmarshalTaggedStruct{FloatMax32: "test"},
+		},
+		"tagged max float64 key": {
+			encoded:    []byte("1.7976931348623157e+308: test"),
+			decodeInto: new(UnmarshalTaggedStruct),
+			decoded:    UnmarshalTaggedStruct{FloatMax64: "test"},
 		},
 
 		// decode into string field
@@ -436,6 +448,38 @@ func TestUnmarshal(t *testing.T) {
 				"a": "",
 				"b": nil,
 			},
+		},
+
+		// decoding floats
+		"decode max float32 into float32": {
+			encoded:    []byte("3.4028234663852886e+38"),
+			decodeInto: new(float32),
+			decoded:    float32(math.MaxFloat32),
+		},
+		"decode max float32 into interface": {
+			encoded:    []byte("3.4028234663852886e+38"),
+			decodeInto: new(interface{}),
+			decoded:    float64(math.MaxFloat32),
+		},
+		"decode max float32 into string": {
+			encoded:    []byte("3.4028234663852886e+38"),
+			decodeInto: new(string),
+			decoded:    "3.4028234663852886e+38",
+		},
+		"decode max float64 into float64": {
+			encoded:    []byte("1.7976931348623157e+308"),
+			decodeInto: new(float64),
+			decoded:    math.MaxFloat64,
+		},
+		"decode max float64 into interface": {
+			encoded:    []byte("1.7976931348623157e+308"),
+			decodeInto: new(interface{}),
+			decoded:    math.MaxFloat64,
+		},
+		"decode max float64 into string": {
+			encoded:    []byte("1.7976931348623157e+308"),
+			decodeInto: new(string),
+			decoded:    "1.7976931348623157e+308",
 		},
 
 		// duplicate (non-casematched) keys (NOTE: this is very non-ideal behaviour!)
