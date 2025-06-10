@@ -25,10 +25,58 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/lithammer/dedent"
 	"sigs.k8s.io/randfill"
 	"sigs.k8s.io/yaml"
 )
+
+// Return the input string with the longest common leading whitespace removed
+// from each line.
+func dedent(in string) string {
+	lines := strings.Split(in, "\n")
+	pfx := ""
+	for i, line := range lines {
+		if i == 0 {
+			pfx = leadingWhitespace(line)
+			continue
+		}
+		if strings.HasPrefix(line, pfx) {
+			continue
+		}
+		pfx = commonPrefix(pfx, line)
+	}
+	if pfx == "" {
+		return in
+	}
+	for i, line := range lines {
+		lines[i] = strings.TrimPrefix(line, pfx)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func leadingWhitespace(s string) string {
+	if len(s) == 0 {
+		return ""
+	}
+	for i, r := range s {
+		if r != ' ' && r != '\t' {
+			return s[:i]
+		}
+	}
+	return s // all whitespace
+}
+
+func commonPrefix(a, b string) string {
+	minLen := len(a)
+	if len(b) < minLen {
+		minLen = len(b)
+	}
+	for i := 0; i < minLen; i++ {
+		if a[i] != b[i] {
+			return a[:i]
+		}
+	}
+	return a[:minLen]
+}
 
 // The following types are intended to provide robust coverage for testing.
 
@@ -1426,7 +1474,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				      retain indentation.
 				blank_lines: |
 				  This is a multi-line string.
-
+				
 				  It can retain blank lines.
 				`,
 			expected: `
@@ -1809,11 +1857,11 @@ func TestKYAMLFromYAML(t *testing.T) {
 			// leading and trailing newlines.
 			input := strings.TrimPrefix(tt.input, "\n")
 			input = strings.TrimSuffix(input, "\n")
-			input = dedent.Dedent(input)
+			input = dedent(input)
 
 			expected := strings.TrimPrefix(tt.expected, "\n")
 			expected = strings.TrimSuffix(expected, "\n")
-			expected = dedent.Dedent(expected)
+			expected = dedent(expected)
 
 			buf := &bytes.Buffer{}
 			if err := ky.FromYAML(strings.NewReader(input), buf); err != nil {
