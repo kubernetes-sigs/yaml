@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/kylelemons/godebug/diff"
 	yaml "sigs.k8s.io/yaml/goyaml.v3"
@@ -34,18 +35,25 @@ const (
 )
 
 func main() {
-	help := flag.Bool("?", false, "print usage and exit")
-	diff := flag.Bool("d", false, "diff input files with their formatted versions")
-	write := flag.Bool("w", false, "write result to input files instead of stdout")
-	format := flag.String("o", "yaml", "output format: may be 'yaml' or 'kyaml'")
-	flag.Parse()
+	fs := flag.NewFlagSet("yamlfmt", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "usage: %s [<yaml-files>...]\n", filepath.Base(os.Args[0]))
+		fmt.Fprintf(fs.Output(), "If no files are specified, stdin will be used.\n")
+		fs.PrintDefaults()
+	}
+
+	diff := fs.Bool("d", false, "diff input files with their formatted versions")
+	help := fs.Bool("h", false, "print help and exit")
+	format := fs.String("o", "yaml", "output format: may be 'yaml' or 'kyaml'")
+	write := fs.Bool("w", false, "write result to input files instead of stdout")
+	fs.Parse(os.Args[1:])
 
 	if *help {
-		fmt.Fprintf(os.Stderr, "usage: %s [<yaml-files>...]\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "If no files are specified, stdin will be used.\n")
-		flag.PrintDefaults()
+		fs.SetOutput(os.Stdout)
+		fs.Usage()
 		os.Exit(0)
 	}
+
 	switch *format {
 	case "yaml", "kyaml":
 		// OK
@@ -57,7 +65,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "cannot use -d and -w together")
 	}
 
-	files := flag.Args()
+	files := fs.Args()
 
 	if len(files) == 0 {
 		if err := renderYAML(os.Stdin, *format, *diff, os.Stdout); err != nil {
@@ -67,6 +75,7 @@ func main() {
 	}
 
 	for i, path := range files {
+		// use a func to catch defer'ed Close
 		func() {
 			// Read the YAML file
 			sourceYaml, err := os.ReadFile(path)
@@ -77,15 +86,22 @@ func main() {
 			in := bytes.NewReader(sourceYaml)
 
 			out := os.Stdout
+			finalize := func() {}
 			if *write {
-				// Open it for (re)writing
-				f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				// Write to a temp file and rename when done.
+				tmp, err := os.CreateTemp("", "yamlfmt-")
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "%s: %v\n", path, err)
-					return
+					fmt.Fprintf(os.Stderr, "%v\n", err)
+					os.Exit(1)
 				}
-				defer f.Close()
-				out = f
+				defer tmp.Close()
+				finalize = func() {
+					if err := os.Rename(tmp.Name(), path); err != nil {
+						fmt.Fprintf(os.Stderr, "%v\n", err)
+						os.Exit(1)
+					}
+				}
+				out = tmp
 			}
 			if len(files) > 1 && !*write {
 				if i > 0 {
@@ -97,6 +113,7 @@ func main() {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
+			finalize()
 		}()
 	}
 }
