@@ -23,8 +23,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/kylelemons/godebug/diff"
 	yaml "sigs.k8s.io/yaml/goyaml.v3"
 	"sigs.k8s.io/yaml/kyaml"
 )
@@ -68,7 +68,7 @@ func main() {
 	files := fs.Args()
 
 	if len(files) == 0 {
-		if err := renderYAML(os.Stdin, *format, *diff, os.Stdout); err != nil {
+		if err := renderYAML("<stdin>", os.Stdin, *format, *diff, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -103,13 +103,13 @@ func main() {
 				}
 				out = tmp
 			}
-			if len(files) > 1 && !*write {
+			if len(files) > 1 && !*write && !*diff {
 				if i > 0 {
 					fmt.Fprintln(out, "")
 				}
 				fmt.Fprintln(out, "# "+path)
 			}
-			if err := renderYAML(in, *format, *diff, out); err != nil {
+			if err := renderYAML(path, in, *format, *diff, out); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -118,7 +118,7 @@ func main() {
 	}
 }
 
-func renderYAML(in io.Reader, format string, printDiff bool, out io.Writer) error {
+func renderYAML(path string, in io.Reader, format string, printDiff bool, out io.Writer) error {
 	if format == fmtKYAML {
 		ky := &kyaml.Encoder{}
 
@@ -131,7 +131,7 @@ func renderYAML(in io.Reader, format string, printDiff bool, out io.Writer) erro
 			if err := ky.FromYAML(bytes.NewReader(ibuf), &obuf); err != nil {
 				return err
 			}
-			d := diff.Diff(string(ibuf), obuf.String())
+			d := trivialDiff(path, string(ibuf), obuf.String())
 			fmt.Fprint(out, d)
 			return nil
 		}
@@ -154,7 +154,7 @@ func renderYAML(in io.Reader, format string, printDiff bool, out io.Writer) erro
 		decoder = yaml.NewDecoder(bytes.NewReader(ibuf))
 		encoder = yaml.NewEncoder(&obuf)
 		finish = func() {
-			d := diff.Diff(string(ibuf), obuf.String())
+			d := trivialDiff(path, string(ibuf), obuf.String())
 			fmt.Fprint(out, d)
 		}
 	} else {
@@ -180,6 +180,52 @@ func renderYAML(in io.Reader, format string, printDiff bool, out io.Writer) erro
 		finish()
 	}
 	return nil
+}
+
+func trivialDiff(path, a, b string) string {
+	if a == b {
+		return ""
+	}
+
+	x := strings.Split(strings.TrimSuffix(a, "\n"), "\n")
+	y := strings.Split(strings.TrimSuffix(b, "\n"), "\n")
+	buf := bytes.Buffer{}
+	buf.WriteString(fmt.Sprintf("--- %s\n+++ %s\n", path, path))
+	buf.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d\n", 1, len(x), 1, len(y)))
+	for {
+		n := 0
+		for ; n < len(x) && n < len(y) && x[n] == y[n]; n++ {
+			buf.WriteString(" " + x[n] + "\n")
+		}
+		x = x[n:]
+		y = y[n:]
+
+		nextX, nextY := nextCommon(x, y)
+		for i := 0; i < nextX; i++ {
+			buf.WriteString("-" + x[i] + "\n")
+		}
+		x = x[nextX:]
+		for j := 0; j < nextY; j++ {
+			buf.WriteString("+" + y[j] + "\n")
+		}
+		y = y[nextY:]
+
+		if len(x) == 0 && len(y) == 0 {
+			break
+		}
+	}
+	return buf.String()
+}
+
+func nextCommon(x, y []string) (int, int) {
+	for i := 0; i < len(x); i++ {
+		for j := 0; j < len(y); j++ {
+			if x[i] == y[j] {
+				return i, j
+			}
+		}
+	}
+	return len(x), len(y)
 }
 
 func setStyle(node *yaml.Node, style yaml.Style) {
