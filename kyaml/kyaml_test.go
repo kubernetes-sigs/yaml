@@ -1970,3 +1970,98 @@ func TestIsTypeAmbiguous(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderStringEscapes(t *testing.T) {
+	simpleCases := []struct {
+		name   string
+		input  rune
+		expect string
+	}{{
+		name:   "backslash",
+		input:  '\\',
+		expect: `"\\"`,
+	}, {
+		name:   "dquote",
+		input:  '"',
+		expect: `"\""`,
+	}, {
+		name:   "bell",
+		input:  '\a',
+		expect: `"\a"`,
+	}, {
+		name:   "backspace",
+		input:  '\b',
+		expect: `"\b"`,
+	}, {
+		name:   "ff",
+		input:  '\f',
+		expect: `"\f"`,
+	}, {
+		name:   "nl",
+		input:  '\n',
+		expect: "\"\\\n \\n\\\n\"",
+	}, {
+		name:   "cr",
+		input:  '\r',
+		expect: `"\r"`,
+	}, {
+		name:   "tab",
+		input:  '\t',
+		expect: `"\t"`,
+	}, {
+		name:   "vtab",
+		input:  '\v',
+		expect: `"\v"`,
+	}, {
+		name:   "null",
+		input:  '\x00',
+		expect: `"\0"`,
+	}, {
+		name:   "esc",
+		input:  '\x1b',
+		expect: `"\e"`,
+	}, {
+		name:   "nextline",
+		input:  '\u0085',
+		expect: `"\N"`,
+	}, {
+		name:   "nbsp",
+		input:  '\u00a0',
+		expect: `"\_"`,
+	}, {
+		name:   "linesep",
+		input:  '\u2028',
+		expect: `"\L"`,
+	}, {
+		name:   "parasep",
+		input:  '\u2029',
+		expect: `"\P"`,
+	}, {
+		name:   "x01",
+		input:  '\x01',
+		expect: `"\x01"`,
+	}, {
+		name:   "uffff",
+		input:  '\uffff',
+		expect: `"\uffff"`,
+	}, {
+		name:   "U0010ffff",
+		input:  '\U0010ffff',
+		expect: `"\U0010ffff"`,
+	}}
+
+	for _, tt := range simpleCases {
+		t.Run(tt.name, func(t *testing.T) {
+			ky := &Encoder{}
+			buf := &bytes.Buffer{}
+			err := ky.renderString(string(tt.input), 0, 0, buf)
+			if err != nil {
+				t.Fatalf("renderString(%q) returned error: %v", tt.input, err)
+			}
+			if result := buf.String(); result != tt.expect {
+				t.Errorf("renderString(%q): want %q, got %q", tt.input, tt.expect, result)
+			}
+		})
+	}
+
+}

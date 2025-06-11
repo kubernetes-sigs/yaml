@@ -237,33 +237,37 @@ const kyamlFoldStr = "\\\n"
 func (ky *Encoder) renderString(val string, indent int, flags flagMask, out io.Writer) error {
 	lazyQuote := flags&flagLazyQuote != 0
 	compact := flags&flagCompact != 0
+	multi := strings.Contains(val, "\n")
 
-	// If no newlines, just use standard Go quoting.
-	if compact || !strings.Contains(val, "\n") {
-		if lazyQuote && !needsQuotes(val) {
-			fmt.Fprint(out, val)
-		} else {
-			fmt.Fprint(out, strconv.Quote(val))
-		}
+	if !multi && lazyQuote && !needsQuotes(val) {
+		fmt.Fprint(out, val)
 		return nil
 	}
 
-	// The input has at least one newline. We will use YAML's line folding to
-	// make the output more readable.
+	// What to print when we find a newline in the input.
+	newline := "\\n"
+	if !compact {
+		// We use YAML's line folding to make the output more readable.
+		newline += kyamlFoldStr
+	}
+
 	//
 	// The rest of this is borrowed from Go's strconv.Quote implementation.
-
-	s := val
+	//
 
 	// accumulate into a buffer
 	buf := &bytes.Buffer{}
 
-	// opening quote and fold
-	fmt.Fprint(buf, `"`, kyamlFoldStr)
+	// opening quote
+	fmt.Fprint(buf, `"`)
+	if multi && !compact {
+		fmt.Fprint(buf, kyamlFoldStr)
+	}
 
 	// Iterating a string with invalid UTF8 returns RuneError rather than the
 	// bytes, so we iterate the string and decode the runes. This is a bit
 	// slower, but gives us a better result.
+	s := val
 	for width := 0; len(s) > 0; s = s[width:] {
 		r := rune(s[0])
 		width = 1
@@ -275,15 +279,17 @@ func (ky *Encoder) renderString(val string, indent int, flags flagMask, out io.W
 			fmt.Fprintf(buf, "%02x", s[0])
 			continue
 		}
-		ky.appendEscapedRune(r, indent, buf)
+		ky.appendEscapedRune(r, indent, newline, buf)
 	}
 
 	// closing quote
 	afterNewline := buf.Bytes()[len(buf.Bytes())-1] == '\n'
-	if !afterNewline {
-		fmt.Fprint(buf, kyamlFoldStr)
+	if multi && !compact {
+		if !afterNewline {
+			fmt.Fprint(buf, kyamlFoldStr)
+		}
+		ky.writeIndent(indent, buf)
 	}
-	ky.writeIndent(indent, buf)
 	fmt.Fprint(buf, `"`)
 
 	fmt.Fprint(out, buf.String())
@@ -433,7 +439,7 @@ func parseTimestamp(s string) (time.Time, bool) {
 }
 
 // We use a buffer here so we can peek backwards.
-func (ky *Encoder) appendEscapedRune(r rune, indent int, buf *bytes.Buffer) {
+func (ky *Encoder) appendEscapedRune(r rune, indent int, newline string, buf *bytes.Buffer) {
 	afterNewline := buf.Bytes()[len(buf.Bytes())-1] == '\n'
 
 	if afterNewline {
@@ -469,14 +475,25 @@ func (ky *Encoder) appendEscapedRune(r rune, indent int, buf *bytes.Buffer) {
 	case '\f':
 		buf.WriteString(`\f`)
 	case '\n':
-		buf.WriteString(`\n`)
-		buf.WriteString(kyamlFoldStr)
+		buf.WriteString(newline)
 	case '\r':
 		buf.WriteString(`\r`)
 	case '\t':
 		buf.WriteString(`\t`)
 	case '\v':
 		buf.WriteString(`\v`)
+	case '\x00':
+		buf.WriteString(`\0`)
+	case '\x1b':
+		buf.WriteString(`\e`)
+	case '\x85':
+		buf.WriteString(`\N`)
+	case '\xa0':
+		buf.WriteString(`\_`)
+	case '\u2028':
+		buf.WriteString(`\L`)
+	case '\u2029':
+		buf.WriteString(`\P`)
 	default:
 		const hexits = "0123456789abcdef"
 		switch {
