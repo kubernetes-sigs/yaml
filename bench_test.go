@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"testing"
 
-	"sigs.k8s.io/yaml/goyaml.v2"
+	"go.yaml.in/yaml/v2"
 )
 
 func newBenchmarkObject() interface{} {
