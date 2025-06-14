@@ -27,8 +27,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	yamlv2 "sigs.k8s.io/yaml/goyaml.v2"
-	yamlv3 "sigs.k8s.io/yaml/goyaml.v3"
+	yamlv2 "go.yaml.in/yaml/v2"
+	yamlv3 "go.yaml.in/yaml/v3"
 )
 
 /* Test helper functions */
