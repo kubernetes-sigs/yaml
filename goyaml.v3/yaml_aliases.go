@@ -46,18 +46,68 @@ type (
 	// TypeError is returned by Unmarshal when one or more fields in the YAML document cannot be properly decoded.
 	// Deprecated: Use go.yaml.in/yaml/v3.TypeError directly.
 	TypeError = gopkg_yaml.TypeError
-	
+
 	// Node represents a YAML node in the document.
 	// Deprecated: Use go.yaml.in/yaml/v3.Node directly.
 	Node = gopkg_yaml.Node
-	
+
 	// Kind represents the kind of a YAML node.
 	// Deprecated: Use go.yaml.in/yaml/v3.Kind directly.
 	Kind = gopkg_yaml.Kind
-	
+
 	// Style represents the style of a YAML node.
 	// Deprecated: Use go.yaml.in/yaml/v3.Style directly.
 	Style = gopkg_yaml.Style
+)
+
+// Constants for Kind type from go.yaml.in/yaml/v3
+const (
+	// DocumentNode represents a YAML document node.
+	// Deprecated: Use go.yaml.in/yaml/v3.DocumentNode directly.
+	DocumentNode = gopkg_yaml.DocumentNode
+
+	// SequenceNode represents a YAML sequence node.
+	// Deprecated: Use go.yaml.in/yaml/v3.SequenceNode directly.
+	SequenceNode = gopkg_yaml.SequenceNode
+
+	// MappingNode represents a YAML mapping node.
+	// Deprecated: Use go.yaml.in/yaml/v3.MappingNode directly.
+	MappingNode = gopkg_yaml.MappingNode
+
+	// ScalarNode represents a YAML scalar node.
+	// Deprecated: Use go.yaml.in/yaml/v3.ScalarNode directly.
+	ScalarNode = gopkg_yaml.ScalarNode
+
+	// AliasNode represents a YAML alias node.
+	// Deprecated: Use go.yaml.in/yaml/v3.AliasNode directly.
+	AliasNode = gopkg_yaml.AliasNode
+)
+
+// Constants for Style type from go.yaml.in/yaml/v3
+const (
+	// TaggedStyle represents a tagged YAML style.
+	// Deprecated: Use go.yaml.in/yaml/v3.TaggedStyle directly.
+	TaggedStyle = gopkg_yaml.TaggedStyle
+
+	// DoubleQuotedStyle represents a double-quoted YAML style.
+	// Deprecated: Use go.yaml.in/yaml/v3.DoubleQuotedStyle directly.
+	DoubleQuotedStyle = gopkg_yaml.DoubleQuotedStyle
+
+	// SingleQuotedStyle represents a single-quoted YAML style.
+	// Deprecated: Use go.yaml.in/yaml/v3.SingleQuotedStyle directly.
+	SingleQuotedStyle = gopkg_yaml.SingleQuotedStyle
+
+	// LiteralStyle represents a literal YAML style.
+	// Deprecated: Use go.yaml.in/yaml/v3.LiteralStyle directly.
+	LiteralStyle = gopkg_yaml.LiteralStyle
+
+	// FoldedStyle represents a folded YAML style.
+	// Deprecated: Use go.yaml.in/yaml/v3.FoldedStyle directly.
+	FoldedStyle = gopkg_yaml.FoldedStyle
+
+	// FlowStyle represents a flow YAML style.
+	// Deprecated: Use go.yaml.in/yaml/v3.FlowStyle directly.
+	FlowStyle = gopkg_yaml.FlowStyle
 )
 
 // Function aliases for public functions from go.yaml.in/yaml/v3
