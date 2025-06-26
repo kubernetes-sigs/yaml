@@ -705,23 +705,34 @@ func TestKYAMLEncoderFuzzRoundTrip(t *testing.T) {
 			f := randfill.New().NilChance(0.5).NumElements(1, 3).MaxDepth(3)
 			f.Fill(original)
 
-			// Marshal to KYAML.
-			ky := &Encoder{}
-			yb, err := ky.Marshal(original)
-			if err != nil {
-				t.Fatalf("iteration %d: failed to render KYAML: %v", i, err)
+			// Run one test.
+			run := func(t *testing.T, ky *Encoder) {
+				t.Helper()
+
+				// Marshal to KYAML.
+				yb, err := ky.Marshal(original)
+				if err != nil {
+					t.Fatalf("iteration %d: failed to render KYAML: %v", i, err)
+				}
+
+				// Parse back from KYAML with the standard parser.
+				parsed := &AllTypesStruct{}
+				if err := yaml.Unmarshal(yb, parsed); err != nil {
+					t.Fatalf("iteration %d: failed to parse KYAML: %v\nKYAML:\n%s", i, err, string(yb))
+				}
+
+				// Compare.
+				if diff := cmp.Diff(original, parsed, cmpopts.EquateEmpty()); diff != "" {
+					t.Fatalf("iteration %d: objects differ after round trip (-original +parsed):\n%s\nKYAML:\n%s", i, diff, string(yb))
+				}
 			}
 
-			// Parse back from KYAML with the standard parser.
-			parsed := &AllTypesStruct{}
-			if err := yaml.Unmarshal(yb, parsed); err != nil {
-				t.Fatalf("iteration %d: failed to parse KYAML: %v\nKYAML:\n%s", i, err, string(yb))
-			}
-
-			// Compare.
-			if diff := cmp.Diff(original, parsed, cmpopts.EquateEmpty()); diff != "" {
-				t.Fatalf("iteration %d: objects differ after round trip (-original +parsed):\n%s\nKYAML:\n%s", i, diff, string(yb))
-			}
+			t.Run("regular", func(t *testing.T) {
+				run(t, &Encoder{})
+			})
+			t.Run("compact", func(t *testing.T) {
+				run(t, &Encoder{Compact: true})
+			})
 		})
 	}
 }
@@ -784,7 +795,7 @@ func TestKYAMLSelfMarshal(t *testing.T) {
 	}
 }
 
-func TestKYAMLOutputSyntax(t *testing.T) {
+func TestKYAMLOutput(t *testing.T) {
 	type testCase struct {
 		name     string
 		input    any
@@ -830,8 +841,11 @@ func TestKYAMLOutputSyntax(t *testing.T) {
 		{"true bool", true, `true`},
 		{"false bool", false, `false`},
 		// string
-		{"empty string", "", `""`},
-		{"regular string", "abc", `"abc"`},
+		{"empty string", "", "\"\""},
+		{"regular string", "abc", "\"abc\""},
+		{"multi-line string",
+			"This\n is a\n  multi-line\n string",
+			"\"\\\n   This\\n\\\n  \\ is a\\n\\\n  \\  multi-line\\n\\\n  \\ string\\\n  \""},
 		// struct
 		{"no-init struct", struct {
 			I int
@@ -978,6 +992,215 @@ func TestKYAMLOutputSyntax(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ky := &Encoder{}
+			yb, err := ky.Marshal(tt.input)
+			if err != nil {
+				t.Fatalf("failed to render KYAML: %v", err)
+			}
+			// always has a newline at the end
+			if result := strings.TrimRight(string(yb), "\n"); result != tt.expected {
+				t.Errorf("Marshal(%v):\nwanted: %q\n   got: %q", tt.input, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestKYAMLOutputCompact(t *testing.T) {
+	type testCase struct {
+		name     string
+		input    interface{}
+		expected string
+	}
+
+	tests := []testCase{
+		// ints
+		{"positive int", int(123), `123`},
+		{"negative int", int(-123), `-123`},
+		{"zero int", int(0), `0`},
+		{"positive int8", int8(123), `123`},
+		{"negative int8", int8(-123), `-123`},
+		{"zero int8", int8(0), `0`},
+		{"positive int16", int16(123), `123`},
+		{"negative int16", int16(-123), `-123`},
+		{"zero int16", int16(0), `0`},
+		{"positive int32", int32(123), `123`},
+		{"negative int32", int32(-123), `-123`},
+		{"zero int32", int32(0), `0`},
+		{"positive int64", int64(123), `123`},
+		{"negative int64", int64(-123), `-123`},
+		{"zero int64", int64(0), `0`},
+		// uints
+		{"positive uint", uint(123), `123`},
+		{"zero uint", uint(0), `0`},
+		{"positive uint8", uint8(123), `123`},
+		{"zero uint8", uint8(0), `0`},
+		{"positive uint16", uint16(123), `123`},
+		{"zero uint16", uint16(0), `0`},
+		{"positive uint32", uint32(123), `123`},
+		{"zero uint32", uint32(0), `0`},
+		{"positive uint64", uint64(123), `123`},
+		{"zero uint64", uint64(0), `0`},
+		// floats
+		{"positive float32", float32(3.5), `3.5`},
+		{"negative float32", float32(-3.5), `-3.5`},
+		{"zero float32", float32(0.0), `0`},
+		{"positive float64", float64(3.5), `3.5`},
+		{"negative float64", float64(-3.5), `-3.5`},
+		{"zero float64", float64(0.0), `0`},
+		// bool
+		{"true bool", true, `true`},
+		{"false bool", false, `false`},
+		// string
+		{"empty string", "", "\"\""},
+		{"regular string", "abc", "\"abc\""},
+		{"multi-line string",
+			"This\n is a\n  multi-line\n string",
+			"\"This\\n is a\\n  multi-line\\n string\""},
+		// struct
+		{"no-init struct", struct {
+			I int
+			S string
+		}{}, "{I: 0, S: \"\"}"},
+		{"init struct", struct {
+			I int
+			S string
+		}{1, "one"}, "{I: 1, S: \"one\"}"},
+		{"empty struct", struct{}{}, `{}`},
+		{"omitempty struct", struct {
+			I int    `json:",omitempty"`
+			S string `json:",omitempty"`
+			B bool   `json:",omitempty"`
+			P *int   `json:",omitempty"`
+		}{}, "{}"},
+		{"omitempty struct nil slice", struct {
+			S []int `json:",omitempty"`
+		}{}, "{}"},
+		{"omitempty struct empty slice", struct {
+			S []int `json:",omitempty"`
+		}{S: []int{}}, "{}"},
+		{"omitempty struct nil map", struct {
+			M map[int]int `json:",omitempty"`
+		}{}, "{}"},
+		{"omitempty struct empty map", struct {
+			M map[int]int `json:",omitempty"`
+		}{M: map[int]int{}}, "{}"},
+		// slice of primitive
+		{"non-empty slice", []int{1, 2, 3}, "[1, 2, 3]"},
+		{"empty slice", []int{}, `[]`},
+		{"nil slice", []int(nil), `null`},
+		// array of primitive
+		{"empty array", [3]int{}, "[0, 0, 0]"},
+		{"non-empty array", [3]int{1, 2, 3}, "[1, 2, 3]"},
+		{"zero-len array", [0]int{}, `[]`},
+		// map
+		{"non-empty map[string]", map[string]int{"c": 3, "a": 1, "b": 2}, "{a: 1, b: 2, c: 3}"},
+		{"non-empty map[int]", map[int]int{3: 3, 1: 1, 2: 2}, "{\"1\": 1, \"2\": 2, \"3\": 3}"},
+		{"empty map", map[string]int{}, `{}`},
+		{"nil map", map[int]int(nil), `null`},
+		{"string map with nulls", map[string]int{
+			"unambiguous": 4,
+			"null":        3,
+			"Null":        2,
+			"NULL":        1,
+			"~":           5,
+		}, "{\"NULL\": 1, \"Null\": 2, \"null\": 3, unambiguous: 4, \"~\": 5}"},
+		{"string map with trues", map[string]int{
+			"true": 8,
+			"True": 4,
+			"TRUE": 3,
+			"on":   7,
+			"On":   2,
+			"ON":   1,
+			"yes":  9,
+			"Yes":  6,
+			"YES":  5,
+		}, "{\"ON\": 1, \"On\": 2, \"TRUE\": 3, \"True\": 4, \"YES\": 5, \"Yes\": 6, \"on\": 7, \"true\": 8, \"yes\": 9}"},
+		{"string map with falses", map[string]int{
+			"false": 7,
+			"False": 2,
+			"FALSE": 1,
+			"off":   9,
+			"Off":   6,
+			"OFF":   5,
+			"no":    8,
+			"No":    4,
+			"NO":    3,
+		}, "{\"FALSE\": 1, \"False\": 2, \"NO\": 3, \"No\": 4, \"OFF\": 5, \"Off\": 6, \"false\": 7, \"no\": 8, \"off\": 9}"},
+		{"string map with ints", map[string]int{
+			"1":        2,
+			"-1":       1,
+			"_1":       3,
+			"__1__2__": 4,
+		}, "{\"-1\": 1, \"1\": 2, \"_1\": 3, \"__1__2__\": 4}"},
+		{"string map with floats", map[string]int{
+			"3.14":  5,
+			".inf":  3,
+			"-.inf": 2,
+			"+.inf": 1,
+			".nan":  4,
+		}, "{\"+.inf\": 1, \"-.inf\": 2, \".inf\": 3, \".nan\": 4, \"3.14\": 5}"},
+		{"string map with unquoted keys", map[string]int{
+			"safe":              3,
+			"_":                 1,
+			"_with_underscore_": 2,
+			"with-dash":         4,
+			"with.dot":          5,
+			"with/slash":        6,
+		}, "{_: 1, _with_underscore_: 2, safe: 3, with-dash: 4, with.dot: 5, with/slash: 6}"},
+		{"string map with quoted keys", map[string]int{
+			"not safe":        1,
+			"with\\backslash": 2,
+		}, "{\"not safe\": 1, \"with\\\\backslash\": 2}"},
+		{"string map with dash keys", map[string]int{
+			"-":              1,
+			"-leading-dash":  2,
+			"trailing-dash-": 3,
+		}, "{\"-\": 1, \"-leading-dash\": 2, \"trailing-dash-\": 3}"},
+		{"string map with dot keys", map[string]int{
+			".":             1,
+			".leading.dot":  2,
+			"trailing.dot.": 3,
+		}, "{\".\": 1, \".leading.dot\": 2, \"trailing.dot.\": 3}"},
+		{"string map with slash keys", map[string]int{
+			"/":               1,
+			"/leading/slash":  2,
+			"trailing/slash/": 3,
+		}, "{\"/\": 1, \"/leading/slash\": 2, \"trailing/slash/\": 3}"},
+		{"string map with dates", map[string]int{
+			"2006":                            2,
+			"2006-1-2":                        3,
+			"2006-1-2T15:4:5.999999999-08:00": 4,
+			"11:00":                           1,
+		}, "{\"11:00\": 1, \"2006\": 2, \"2006-1-2\": 3, \"2006-1-2T15:4:5.999999999-08:00\": 4}"},
+		{"multi-line-string-key map", map[string]int{
+			"1\n 2\n  \n3": 123,
+			"4\n 5\n  \n6": 456,
+		}, "{\"1\\n 2\\n  \\n3\": 123, \"4\\n 5\\n  \\n6\": 456}"},
+		// pointer
+		{"non-nil pointer", new(int), `0`},
+		{"nil pointer", (*int)(nil), `null`},
+		// slice of compound
+		{"slice of struct", []struct{ I int }{
+			{1}, {2}, {3},
+		}, "[{I: 1}, {I: 2}, {I: 3}]"},
+		{"slice of slice", [][]int{
+			{1, 2, 3},
+			{4, 5, 6},
+			{7, 8, 9},
+		}, "[[1, 2, 3], [4, 5, 6], [7, 8, 9]]"},
+		{"slice of map", []map[string]int{
+			{"a": 1, "b": 2},
+			{"c": 3, "d": 4},
+			{"e": 5, "f": 6},
+		}, "[{a: 1, b: 2}, {c: 3, d: 4}, {e: 5, \"f\": 6}]"},
+		// interface
+		// TODO: figure out how to make a reflect.Value where Kind() ==
+		// Interface. As far as I can tell, ValueOf() returns either the
+		// underlying type's Kind or Invalid.
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ky := &Encoder{Compact: true}
 			yb, err := ky.Marshal(tt.input)
 			if err != nil {
 				t.Fatalf("failed to render KYAML: %v", err)

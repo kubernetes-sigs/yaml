@@ -60,7 +60,12 @@ import (
 // is halfway between YAML and JSON, but is a strict subset of YAML, so it
 // should should be readable by any YAML parser. It is designed to be explicit
 // and unambiguous, and eschews significant whitespace.
-type Encoder struct{}
+type Encoder struct {
+	// Compact tells the encoder to use compact formatting. This puts all the
+	// data on one line, with no extra newlines, no comments, and no multi-line
+	// formatting.
+	Compact bool
+}
 
 // FromYAML renders a KYAML (multi-)document from YAML bytes (JSON is YAML),
 // including the KYAML header. The result always has a trailing newline.
@@ -88,7 +93,7 @@ func (ky *Encoder) FromYAML(in io.Reader, out io.Writer) error {
 			return err
 		}
 
-		if err := ky.renderDocument(&doc, 0, flagsNone, out); err != nil {
+		if err := ky.renderDocument(&doc, 0, ky.flags(), out); err != nil {
 			return err
 		}
 	}
@@ -138,7 +143,7 @@ func (ky *Encoder) fromObjectYAML(in io.Reader, out io.Writer) error {
 		return fmt.Errorf("kyaml internal error: line %d: expected document node, got %s", doc.Line, ky.nodeKindString(doc.Kind))
 	}
 
-	if err := ky.renderNode(&doc, 0, flagsNone, out); err != nil {
+	if err := ky.renderNode(&doc, 0, ky.flags(), out); err != nil {
 		return fmt.Errorf("error rendering document: %v", err)
 	}
 
@@ -167,10 +172,46 @@ const (
 	flagCompact   flagMask = 0x02
 )
 
+// flags returns a flagMask representing the current encoding options. It can
+// be used directly or OR'ed with another mask.
+func (ky *Encoder) flags() flagMask {
+	flags := flagsNone
+	if ky.Compact {
+		flags |= flagCompact
+	}
+	return flags
+}
+
+// renderNode processes a YAML node, calling the appropriate render function
+// for its type.  Each render function should assume that the output "cursor"
+// is positioned at the start of the node and should not emit a final newline.
+// If a render function needs to linewrap or indent (e.g. a struct), it should
+// assume the indent level is currently correct for the node type itself, and
+// may need to indent more.
+func (ky *Encoder) renderNode(node *yaml.Node, indent int, flags flagMask, out io.Writer) error {
+	if node == nil {
+		return nil
+	}
+
+	switch node.Kind {
+	case yaml.DocumentNode:
+		return ky.renderDocument(node, indent, flags, out)
+	case yaml.ScalarNode:
+		return ky.renderScalar(node, indent, flags, out)
+	case yaml.SequenceNode:
+		return ky.renderSequence(node, indent, flags, out)
+	case yaml.MappingNode:
+		return ky.renderMapping(node, indent, flags, out)
+	case yaml.AliasNode:
+		return ky.renderAlias(node, indent, flags, out)
+	}
+	return nil
+}
+
 // renderDocument processes a YAML document node, rendering it to the output.
 // This function assumes that the output "cursor" is positioned at the start of
 // the document and should always emit a final newline.
-func (ky *Encoder) renderDocument(doc *yaml.Node, indent int, _ flagMask, out io.Writer) error {
+func (ky *Encoder) renderDocument(doc *yaml.Node, indent int, flags flagMask, out io.Writer) error {
 	if len(doc.Content) == 0 {
 		return fmt.Errorf("kyaml internal error: line %d: document has no content node (%d)", doc.Line, len(doc.Content))
 	}
@@ -181,34 +222,40 @@ func (ky *Encoder) renderDocument(doc *yaml.Node, indent int, _ flagMask, out io
 		return fmt.Errorf("kyaml internal error: line %d: document non-zero indent (%d)", doc.Line, indent)
 	}
 
+	compact := flags&flagCompact != 0
+
 	// For document nodes, the cursor is assumed to be ready to render.
-	if len(doc.HeadComment) > 0 {
-		ky.renderComments(doc.HeadComment, indent, out)
-		fmt.Fprint(out, "\n")
-	}
 	child := doc.Content[0]
-	if len(child.HeadComment) > 0 {
-		ky.renderComments(child.HeadComment, indent, out)
-		fmt.Fprint(out, "\n")
+	if !compact {
+		if len(doc.HeadComment) > 0 {
+			ky.renderComments(doc.HeadComment, indent, out)
+			fmt.Fprint(out, "\n")
+		}
+		if len(child.HeadComment) > 0 {
+			ky.renderComments(child.HeadComment, indent, out)
+			fmt.Fprint(out, "\n")
+		}
 	}
-	if err := ky.renderNode(child, indent, flagsNone, out); err != nil {
+	if err := ky.renderNode(child, indent, flags, out); err != nil {
 		return err
 	}
-	if len(child.LineComment) > 0 {
-		ky.renderComments(" "+child.LineComment, 0, out)
-	}
-	fmt.Fprint(out, "\n")
-	if len(child.FootComment) > 0 {
-		ky.renderComments(child.FootComment, indent, out)
+	if !compact {
+		if len(child.LineComment) > 0 {
+			ky.renderComments(" "+child.LineComment, 0, out)
+		}
 		fmt.Fprint(out, "\n")
-	}
-	if len(doc.LineComment) > 0 {
-		ky.renderComments(" "+doc.LineComment, 0, out)
-		fmt.Fprint(out, "\n")
-	}
-	if len(doc.FootComment) > 0 {
-		ky.renderComments(doc.FootComment, indent, out)
-		fmt.Fprint(out, "\n")
+		if len(child.FootComment) > 0 {
+			ky.renderComments(child.FootComment, indent, out)
+			fmt.Fprint(out, "\n")
+		}
+		if len(doc.LineComment) > 0 {
+			ky.renderComments(" "+doc.LineComment, 0, out)
+			fmt.Fprint(out, "\n")
+		}
+		if len(doc.FootComment) > 0 {
+			ky.renderComments(doc.FootComment, indent, out)
+			fmt.Fprint(out, "\n")
+		}
 	}
 	return nil
 }
@@ -220,10 +267,8 @@ func (ky *Encoder) renderScalar(node *yaml.Node, indent int, flags flagMask, out
 	switch node.Tag {
 	case intTag, floatTag, boolTag, nullTag:
 		fmt.Fprint(out, node.Value)
-	case strTag:
+	case strTag, timestampTag:
 		return ky.renderString(node.Value, indent+1, flags, out)
-	case timestampTag:
-		return ky.renderString(node.Value, indent+1, flagsNone, out)
 	default:
 		return fmt.Errorf("kyaml internal error: line %d: unknown tag %q on scalar node %q", node.Line, node.Tag, node.Value)
 	}
@@ -521,10 +566,13 @@ func (ky *Encoder) appendEscapedRune(r rune, indent int, newline string, buf *by
 // renderSequence processes a YAML sequence node, rendering it to the output.  This
 // DOES NOT render a trailing newline or head/line/foot comments of the sequence
 // itself, but DOES render comments of the child nodes.
-func (ky *Encoder) renderSequence(node *yaml.Node, indent int, _ flagMask, out io.Writer) error {
+func (ky *Encoder) renderSequence(node *yaml.Node, indent int, flags flagMask, out io.Writer) error {
 	if len(node.Content) == 0 {
 		fmt.Fprint(out, "[]")
 		return nil
+	}
+	if flags&flagCompact != 0 {
+		return ky.renderCompactSequence(node, flags, out)
 	}
 
 	// See if this list can use cuddled formatting.
@@ -541,31 +589,45 @@ func (ky *Encoder) renderSequence(node *yaml.Node, indent int, _ flagMask, out i
 	}
 
 	if cuddle {
-		return ky.renderCuddledSequence(node, indent, out)
+		return ky.renderCuddledSequence(node, indent, flags, out)
 	}
-	return ky.renderUncuddledSequence(node, indent, out)
+	return ky.renderUncuddledSequence(node, indent, flags, out)
+}
+
+// renderCompactSequence renders a YAML sequence node in compact form.
+func (ky *Encoder) renderCompactSequence(node *yaml.Node, flags flagMask, out io.Writer) error {
+	fmt.Fprint(out, "[")
+	for i, child := range node.Content {
+		if i > 0 {
+			fmt.Fprint(out, ", ")
+		}
+		if err := ky.renderNode(child, 0, flags, out); err != nil {
+			return err
+		}
+	}
+	fmt.Fprint(out, "]")
+	return nil
 }
 
 // renderCuddledSequence processes a YAML sequence node which has already been
 // determined to be cuddled.  We only cuddle sequences of structs or lists
 // which have no comments.
-func (ky *Encoder) renderCuddledSequence(node *yaml.Node, indent int, out io.Writer) error {
+func (ky *Encoder) renderCuddledSequence(node *yaml.Node, indent int, flags flagMask, out io.Writer) error {
 	fmt.Fprint(out, "[")
 	for i, child := range node.Content {
 		// Each iteration should leave us cuddled for the next item.
 		if i > 0 {
 			fmt.Fprint(out, ", ")
 		}
-		if err := ky.renderNode(child, indent, flagsNone, out); err != nil {
+		if err := ky.renderNode(child, indent, flags, out); err != nil {
 			return err
 		}
 	}
 	fmt.Fprint(out, "]")
-
 	return nil
 }
 
-func (ky *Encoder) renderUncuddledSequence(node *yaml.Node, indent int, out io.Writer) error {
+func (ky *Encoder) renderUncuddledSequence(node *yaml.Node, indent int, flags flagMask, out io.Writer) error {
 	// Get into the right state for the first item.
 	fmt.Fprint(out, "[\n")
 	ky.writeIndent(indent, out)
@@ -580,7 +642,7 @@ func (ky *Encoder) renderUncuddledSequence(node *yaml.Node, indent int, out io.W
 			ky.writeIndent(indent+1, out)
 		}
 
-		if err := ky.renderNode(child, indent+1, flagsNone, out); err != nil {
+		if err := ky.renderNode(child, indent+1, flags, out); err != nil {
 			return err
 		}
 
@@ -635,10 +697,14 @@ func isCuddledKind(node *yaml.Node) bool {
 // renderMapping processes a YAML mapping node, rendering it to the output.  This
 // DOES NOT render a trailing newline or head/line/foot comments of the mapping
 // itself, but DOES render comments of the child nodes.
-func (ky *Encoder) renderMapping(node *yaml.Node, indent int, _ flagMask, out io.Writer) error {
+func (ky *Encoder) renderMapping(node *yaml.Node, indent int, flags flagMask, out io.Writer) error {
 	if len(node.Content) == 0 {
 		fmt.Fprint(out, "{}")
 		return nil
+	}
+
+	if flags&flagCompact != 0 {
+		return ky.renderCompactMapping(node, flags, out)
 	}
 
 	joinComments := func(a, b string) string {
@@ -668,7 +734,7 @@ func (ky *Encoder) renderMapping(node *yaml.Node, indent int, _ flagMask, out io
 			return err
 		}
 		fmt.Fprint(out, ": ")
-		if err := ky.renderNode(val, indent+1, flagsNone, out); err != nil {
+		if err := ky.renderNode(val, indent+1, flags, out); err != nil {
 			return err
 		}
 		fmt.Fprint(out, ",")
@@ -689,6 +755,30 @@ func (ky *Encoder) renderMapping(node *yaml.Node, indent int, _ flagMask, out io
 		}
 	}
 	ky.writeIndent(indent, out)
+	fmt.Fprint(out, "}")
+	return nil
+}
+
+// renderCompactMapping renders a YAML mapping node in compact form.
+func (ky *Encoder) renderCompactMapping(node *yaml.Node, flags flagMask, out io.Writer) error {
+	fmt.Fprint(out, "{")
+	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i]
+		val := node.Content[i+1]
+
+		if i > 0 {
+			fmt.Fprint(out, ", ")
+		}
+		// Mapping keys are always strings in KYAML, even if the YAML node says
+		// otherwise.
+		if err := ky.renderString(key.Value, 0, flags|flagLazyQuote|flagCompact, out); err != nil {
+			return err
+		}
+		fmt.Fprint(out, ": ")
+		if err := ky.renderNode(val, 0, flags, out); err != nil {
+			return err
+		}
+	}
 	fmt.Fprint(out, "}")
 	return nil
 }
@@ -720,32 +810,6 @@ func (ky *Encoder) renderComments(comments string, indent int, out io.Writer) {
 func (ky *Encoder) renderAlias(node *yaml.Node, indent int, flags flagMask, out io.Writer) error {
 	if node.Alias != nil {
 		return ky.renderNode(node.Alias, indent+1, flags, out)
-	}
-	return nil
-}
-
-// renderNode processes a YAML node, calling the appropriate render function
-// for its type.  Each render function should assume that the output "cursor"
-// is positioned at the start of the node and should not emit a final newline.
-// If a render function needs to linewrap or indent (e.g. a struct), it should
-// assume the indent level is currently correct for the node type itself, and
-// may need to indent more.
-func (ky *Encoder) renderNode(node *yaml.Node, indent int, flags flagMask, out io.Writer) error {
-	if node == nil {
-		return nil
-	}
-
-	switch node.Kind {
-	case yaml.DocumentNode:
-		return ky.renderDocument(node, indent, flags, out)
-	case yaml.ScalarNode:
-		return ky.renderScalar(node, indent, flags, out)
-	case yaml.SequenceNode:
-		return ky.renderSequence(node, indent, flags, out)
-	case yaml.MappingNode:
-		return ky.renderMapping(node, indent, flags, out)
-	case yaml.AliasNode:
-		return ky.renderAlias(node, indent, flags, out)
 	}
 	return nil
 }
