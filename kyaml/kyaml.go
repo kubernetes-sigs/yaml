@@ -96,6 +96,7 @@ func (ky *Encoder) FromYAML(in io.Reader, out io.Writer) error {
 		if err := ky.renderDocument(&doc, 0, ky.flags(), out); err != nil {
 			return err
 		}
+		fmt.Fprintf(out, "\n")
 	}
 
 	return nil
@@ -112,7 +113,8 @@ func (ky *Encoder) FromObject(obj any, out io.Writer) error {
 	return ky.FromYAML(bytes.NewReader(jb), out)
 }
 
-// Marshal renders a single Go object as KYAML, without the header.
+// Marshal renders a single Go object as KYAML, without the header or trailing
+// newline.
 func (ky *Encoder) Marshal(obj any) ([]byte, error) {
 	// Convert the object to JSON bytes to take advantage of all the JSON tag
 	// handling and things like that.
@@ -210,7 +212,7 @@ func (ky *Encoder) renderNode(node *yaml.Node, indent int, flags flagMask, out i
 
 // renderDocument processes a YAML document node, rendering it to the output.
 // This function assumes that the output "cursor" is positioned at the start of
-// the document and should always emit a final newline.
+// the document. This does not emit a final newline.
 func (ky *Encoder) renderDocument(doc *yaml.Node, indent int, flags flagMask, out io.Writer) error {
 	if len(doc.Content) == 0 {
 		return fmt.Errorf("kyaml internal error: line %d: document has no content node (%d)", doc.Line, len(doc.Content))
@@ -243,18 +245,17 @@ func (ky *Encoder) renderDocument(doc *yaml.Node, indent int, flags flagMask, ou
 		if len(child.LineComment) > 0 {
 			ky.renderComments(" "+child.LineComment, 0, out)
 		}
-		fmt.Fprint(out, "\n")
 		if len(child.FootComment) > 0 {
-			ky.renderComments(child.FootComment, indent, out)
 			fmt.Fprint(out, "\n")
+			ky.renderComments(child.FootComment, indent, out)
 		}
 		if len(doc.LineComment) > 0 {
-			ky.renderComments(" "+doc.LineComment, 0, out)
 			fmt.Fprint(out, "\n")
+			ky.renderComments(" "+doc.LineComment, 0, out)
 		}
 		if len(doc.FootComment) > 0 {
-			ky.renderComments(doc.FootComment, indent, out)
 			fmt.Fprint(out, "\n")
+			ky.renderComments(doc.FootComment, indent, out)
 		}
 	}
 	return nil

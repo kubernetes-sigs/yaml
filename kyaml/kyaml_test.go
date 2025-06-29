@@ -34,9 +34,14 @@ import (
 func dedent(in string) string {
 	lines := strings.Split(in, "\n")
 	pfx := ""
-	for i, line := range lines {
-		if i == 0 {
+	started := false
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
+		if !started {
 			pfx = leadingWhitespace(line)
+			started = true
 			continue
 		}
 		if strings.HasPrefix(line, pfx) {
@@ -789,430 +794,590 @@ func TestKYAMLSelfMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to render KYAML: %v", err)
 	}
-	expected := "{\n  key: \"value\",\n}\n"
+	expected := "{\n  key: \"value\",\n}"
 	if s := string(yb); s != expected {
 		t.Fatalf("wrong result:\nexpected: %q\n     got: %q", expected, s)
 	}
 }
 
+// TestKYAMLOutput checks that the KYAML output is correct for various Go
+// inputs.
 func TestKYAMLOutput(t *testing.T) {
 	type testCase struct {
-		name     string
-		input    any
-		expected string
+		name          string
+		input         any
+		expectRegular string
+		expectCompact string
 	}
 
-	tests := []testCase{
-		// ints
-		{"positive int", int(123), `123`},
-		{"negative int", int(-123), `-123`},
-		{"zero int", int(0), `0`},
-		{"positive int8", int8(123), `123`},
-		{"negative int8", int8(-123), `-123`},
-		{"zero int8", int8(0), `0`},
-		{"positive int16", int16(123), `123`},
-		{"negative int16", int16(-123), `-123`},
-		{"zero int16", int16(0), `0`},
-		{"positive int32", int32(123), `123`},
-		{"negative int32", int32(-123), `-123`},
-		{"zero int32", int32(0), `0`},
-		{"positive int64", int64(123), `123`},
-		{"negative int64", int64(-123), `-123`},
-		{"zero int64", int64(0), `0`},
-		// uints
-		{"positive uint", uint(123), `123`},
-		{"zero uint", uint(0), `0`},
-		{"positive uint8", uint8(123), `123`},
-		{"zero uint8", uint8(0), `0`},
-		{"positive uint16", uint16(123), `123`},
-		{"zero uint16", uint16(0), `0`},
-		{"positive uint32", uint32(123), `123`},
-		{"zero uint32", uint32(0), `0`},
-		{"positive uint64", uint64(123), `123`},
-		{"zero uint64", uint64(0), `0`},
-		// floats
-		{"positive float32", float32(3.5), `3.5`},
-		{"negative float32", float32(-3.5), `-3.5`},
-		{"zero float32", float32(0.0), `0`},
-		{"positive float64", float64(3.5), `3.5`},
-		{"negative float64", float64(-3.5), `-3.5`},
-		{"zero float64", float64(0.0), `0`},
-		// bool
-		{"true bool", true, `true`},
-		{"false bool", false, `false`},
-		// string
-		{"empty string", "", "\"\""},
-		{"regular string", "abc", "\"abc\""},
-		{"multi-line string",
-			"This\n is a\n  multi-line\n string",
-			"\"\\\n   This\\n\\\n  \\ is a\\n\\\n  \\  multi-line\\n\\\n  \\ string\\\n  \""},
-		// struct
-		{"no-init struct", struct {
+	tests := []testCase{{
+		name:          "positive int",
+		input:         int(123),
+		expectRegular: `123`,
+		expectCompact: `123`,
+	}, {
+		name:          "negative int",
+		input:         int(-123),
+		expectRegular: `-123`,
+		expectCompact: `-123`,
+	}, {
+		name:          "zero int",
+		input:         int(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive int8",
+		input:         int8(123),
+		expectRegular: `123`,
+		expectCompact: `123`,
+	}, {
+		name:          "negative int8",
+		input:         int8(-123),
+		expectRegular: `-123`,
+		expectCompact: `-123`,
+	}, {
+		name:          "zero int8",
+		input:         int8(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive int16",
+		input:         int16(1234),
+		expectRegular: `1234`,
+		expectCompact: `1234`,
+	}, {
+		name:          "negative int16",
+		input:         int16(-1234),
+		expectRegular: `-1234`,
+		expectCompact: `-1234`,
+	}, {
+		name:          "zero int16",
+		input:         int16(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive int32",
+		input:         int32(123456),
+		expectRegular: `123456`,
+		expectCompact: `123456`,
+	}, {
+		name:          "negative int32",
+		input:         int32(-123456),
+		expectRegular: `-123456`,
+		expectCompact: `-123456`,
+	}, {
+		name:          "zero int32",
+		input:         int32(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive int64",
+		input:         int64(12345678900),
+		expectRegular: `12345678900`,
+		expectCompact: `12345678900`,
+	}, {
+		name:          "negative int64",
+		input:         int64(-12345678900),
+		expectRegular: `-12345678900`,
+		expectCompact: `-12345678900`,
+	}, {
+		name:          "zero int64",
+		input:         int64(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive uint",
+		input:         uint(123),
+		expectRegular: `123`,
+		expectCompact: `123`,
+	}, {
+		name:          "zero uint",
+		input:         uint(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive uint8",
+		input:         uint8(123),
+		expectRegular: `123`,
+		expectCompact: `123`,
+	}, {
+		name:          "zero uint8",
+		input:         uint8(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive uint16",
+		input:         uint16(1234),
+		expectRegular: `1234`,
+		expectCompact: `1234`,
+	}, {
+		name:          "zero uint16",
+		input:         uint16(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive uint32",
+		input:         uint32(123456),
+		expectRegular: `123456`,
+		expectCompact: `123456`,
+	}, {
+		name:          "zero uint32",
+		input:         uint32(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive uint64",
+		input:         uint64(12345678900),
+		expectRegular: `12345678900`,
+		expectCompact: `12345678900`,
+	}, {
+		name:          "zero uint64",
+		input:         uint64(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive float32",
+		input:         float32(3.5),
+		expectRegular: `3.5`,
+		expectCompact: `3.5`,
+	}, {
+		name:          "negative float32",
+		input:         float32(-3.5),
+		expectRegular: `-3.5`,
+		expectCompact: `-3.5`,
+	}, {
+		name:          "zero float32",
+		input:         float32(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "positive float64",
+		input:         float64(3.5),
+		expectRegular: `3.5`,
+		expectCompact: `3.5`,
+	}, {
+		name:          "negative float64",
+		input:         float64(-3.5),
+		expectRegular: `-3.5`,
+		expectCompact: `-3.5`,
+	}, {
+		name:          "zero float64",
+		input:         float64(0),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "true bool",
+		input:         bool(true),
+		expectRegular: `true`,
+		expectCompact: `true`,
+	}, {
+		name:          "false bool",
+		input:         bool(false),
+		expectRegular: `false`,
+		expectCompact: `false`,
+	}, {
+		name:          "empty string",
+		input:         "",
+		expectRegular: `""`,
+		expectCompact: `""`,
+	}, {
+		name:          "regular string",
+		input:         "abc",
+		expectRegular: `"abc"`,
+		expectCompact: `"abc"`,
+	}, {
+		name:          "multi-line string",
+		input:         "This\n is a\n  multi-line\n string",
+		expectRegular: "\"\\\n   This\\n\\\n  \\ is a\\n\\\n  \\  multi-line\\n\\\n  \\ string\\\n  \"",
+		expectCompact: `"This\n is a\n  multi-line\n string"`,
+	}, {
+		name: "no-init struct",
+		input: struct {
 			I int
 			S string
-		}{}, "{\n  I: 0,\n  S: \"\",\n}"},
-		{"init struct", struct {
+		}{},
+		expectRegular: `
+			{
+			  I: 0,
+			  S: "",
+			}`,
+		expectCompact: `{I: 0, S: ""}`,
+	}, {
+		name: "init struct",
+		input: struct {
 			I int
 			S string
-		}{1, "one"}, "{\n  I: 1,\n  S: \"one\",\n}"},
-		{"empty struct", struct{}{}, `{}`},
-		{"omitempty struct", struct {
+		}{1, "one"},
+		expectRegular: `
+			{
+			  I: 1,
+			  S: "one",
+			}`,
+		expectCompact: `{I: 1, S: "one"}`,
+	}, {
+		name:          "empty struct",
+		input:         struct{}{},
+		expectRegular: `{}`,
+		expectCompact: `{}`,
+	}, {
+		name: "omitempty struct",
+		input: struct {
 			I int    `json:",omitempty"`
 			S string `json:",omitempty"`
 			B bool   `json:",omitempty"`
 			P *int   `json:",omitempty"`
-		}{}, "{}"},
-		{"omitempty struct nil slice", struct {
+		}{},
+		expectRegular: `{}`,
+		expectCompact: `{}`,
+	}, {
+		name: "omitempty struct nil slice",
+		input: struct {
 			S []int `json:",omitempty"`
-		}{}, "{}"},
-		{"omitempty struct empty slice", struct {
+		}{},
+		expectRegular: `{}`,
+		expectCompact: `{}`,
+	}, {
+		name: "omitempty struct empty slice",
+		input: struct {
 			S []int `json:",omitempty"`
-		}{S: []int{}}, "{}"},
-		{"omitempty struct nil map", struct {
+		}{S: []int{}},
+		expectRegular: `{}`,
+		expectCompact: `{}`,
+	}, {
+		name: "omitempty struct nil map",
+		input: struct {
 			M map[int]int `json:",omitempty"`
-		}{}, "{}"},
-		{"omitempty struct empty map", struct {
+		}{},
+		expectRegular: `{}`,
+		expectCompact: `{}`,
+	}, {
+		name: "omitempty struct empty map",
+		input: struct {
 			M map[int]int `json:",omitempty"`
-		}{M: map[int]int{}}, "{}"},
-		// slice of primitive
-		{"non-empty slice", []int{1, 2, 3}, "[\n  1,\n  2,\n  3,\n]"},
-		{"empty slice", []int{}, `[]`},
-		{"nil slice", []int(nil), `null`},
-		// array of primitive
-		{"empty array", [3]int{}, "[\n  0,\n  0,\n  0,\n]"},
-		{"non-empty array", [3]int{1, 2, 3}, "[\n  1,\n  2,\n  3,\n]"},
-		{"zero-len array", [0]int{}, `[]`},
-		// map
-		{"non-empty map[string]", map[string]int{"c": 3, "a": 1, "b": 2}, "{\n  a: 1,\n  b: 2,\n  c: 3,\n}"},
-		{"non-empty map[int]", map[int]int{3: 3, 1: 1, 2: 2}, "{\n  \"1\": 1,\n  \"2\": 2,\n  \"3\": 3,\n}"},
-		{"empty map", map[string]int{}, `{}`},
-		{"nil map", map[int]int(nil), `null`},
-		{"string map with nulls", map[string]int{
-			"unambiguous": 4,
-			"null":        3,
-			"Null":        2,
-			"NULL":        1,
-			"~":           5,
-		}, "{\n  \"NULL\": 1,\n  \"Null\": 2,\n  \"null\": 3,\n  unambiguous: 4,\n  \"~\": 5,\n}"},
-		{"string map with trues", map[string]int{
-			"true": 8,
-			"True": 4,
-			"TRUE": 3,
-			"on":   7,
-			"On":   2,
-			"ON":   1,
-			"yes":  9,
-			"Yes":  6,
-			"YES":  5,
-		}, "{\n  \"ON\": 1,\n  \"On\": 2,\n  \"TRUE\": 3,\n  \"True\": 4,\n  \"YES\": 5,\n  \"Yes\": 6,\n  \"on\": 7,\n  \"true\": 8,\n  \"yes\": 9,\n}"},
-		{"string map with falses", map[string]int{
-			"false": 7,
-			"False": 2,
-			"FALSE": 1,
-			"off":   9,
-			"Off":   6,
-			"OFF":   5,
-			"no":    8,
-			"No":    4,
-			"NO":    3,
-		}, "{\n  \"FALSE\": 1,\n  \"False\": 2,\n  \"NO\": 3,\n  \"No\": 4,\n  \"OFF\": 5,\n  \"Off\": 6,\n  \"false\": 7,\n  \"no\": 8,\n  \"off\": 9,\n}"},
-		{"string map with ints", map[string]int{
-			"1":        2,
-			"-1":       1,
-			"_1":       3,
-			"__1__2__": 4,
-		}, "{\n  \"-1\": 1,\n  \"1\": 2,\n  \"_1\": 3,\n  \"__1__2__\": 4,\n}"},
-		{"string map with floats", map[string]int{
-			"3.14":  5,
-			".inf":  3,
-			"-.inf": 2,
-			"+.inf": 1,
-			".nan":  4,
-		}, "{\n  \"+.inf\": 1,\n  \"-.inf\": 2,\n  \".inf\": 3,\n  \".nan\": 4,\n  \"3.14\": 5,\n}"},
-		{"string map with unquoted keys", map[string]int{
-			"safe":              3,
-			"_":                 1,
-			"_with_underscore_": 2,
-			"with-dash":         4,
-			"with.dot":          5,
-			"with/slash":        6,
-		}, "{\n  _: 1,\n  _with_underscore_: 2,\n  safe: 3,\n  with-dash: 4,\n  with.dot: 5,\n  with/slash: 6,\n}"},
-		{"string map with quoted keys", map[string]int{
-			"not safe":        1,
-			"with\\backslash": 2,
-		}, "{\n  \"not safe\": 1,\n  \"with\\\\backslash\": 2,\n}"},
-		{"string map with dash keys", map[string]int{
-			"-":              1,
-			"-leading-dash":  2,
-			"trailing-dash-": 3,
-		}, "{\n  \"-\": 1,\n  \"-leading-dash\": 2,\n  \"trailing-dash-\": 3,\n}"},
-		{"string map with dot keys", map[string]int{
-			".":             1,
-			".leading.dot":  2,
-			"trailing.dot.": 3,
-		}, "{\n  \".\": 1,\n  \".leading.dot\": 2,\n  \"trailing.dot.\": 3,\n}"},
-		{"string map with slash keys", map[string]int{
-			"/":               1,
-			"/leading/slash":  2,
-			"trailing/slash/": 3,
-		}, "{\n  \"/\": 1,\n  \"/leading/slash\": 2,\n  \"trailing/slash/\": 3,\n}"},
-		{"string map with dates", map[string]int{
-			"2006":                            2,
-			"2006-1-2":                        3,
-			"2006-1-2T15:4:5.999999999-08:00": 4,
-			"11:00":                           1,
-		}, "{\n  \"11:00\": 1,\n  \"2006\": 2,\n  \"2006-1-2\": 3,\n  \"2006-1-2T15:4:5.999999999-08:00\": 4,\n}"},
-		{"multi-line-string-key map", map[string]int{
+		}{map[int]int{}},
+		expectRegular: `{}`,
+		expectCompact: `{}`,
+	}, {
+		name:  "non-empty slice",
+		input: []int{1, 2, 3},
+		expectRegular: `
+			[
+			  1,
+			  2,
+			  3,
+			]`,
+		expectCompact: `[1, 2, 3]`,
+	}, {
+		name:          "empty slice",
+		input:         []int{},
+		expectRegular: `[]`,
+		expectCompact: `[]`,
+	}, {
+		name:          "nil slice",
+		input:         []int(nil),
+		expectRegular: `null`,
+		expectCompact: `null`,
+	}, {
+		name:  "empty array",
+		input: [3]int{},
+		expectRegular: `
+			[
+			  0,
+			  0,
+			  0,
+			]`,
+		expectCompact: `[0, 0, 0]`,
+	}, {
+		name:  "non-empty array",
+		input: [3]int{1, 2, 3},
+		expectRegular: `
+			[
+			  1,
+			  2,
+			  3,
+			]`,
+		expectCompact: `[1, 2, 3]`,
+	}, {
+		name:          "zero-len array",
+		input:         [0]int{},
+		expectRegular: `[]`,
+		expectCompact: `[]`,
+	}, {
+		name:  "non-empty map[string]",
+		input: map[string]int{"a": 1, "b": 2, "c": 3},
+		expectRegular: `
+			{
+			  a: 1,
+			  b: 2,
+			  c: 3,
+			}`,
+		expectCompact: `{a: 1, b: 2, c: 3}`,
+	}, {
+		name:  "non-empty map[int]",
+		input: map[int]int{1: 1, 2: 2, 3: 3},
+		expectRegular: `
+			{
+			  "1": 1,
+			  "2": 2,
+			  "3": 3,
+			}`,
+		expectCompact: `{"1": 1, "2": 2, "3": 3}`,
+	}, {
+		name:          "empty map",
+		input:         map[string]int{},
+		expectRegular: `{}`,
+		expectCompact: `{}`,
+	}, {
+		name:          "nil map",
+		input:         map[int]int(nil),
+		expectRegular: `null`,
+		expectCompact: `null`,
+	}, {
+		name:  "string map with nulls",
+		input: map[string]int{"NULL": 1, "Null": 2, "null": 3, "unambiguous": 4, "~": 5},
+		expectRegular: `
+			{
+			  "NULL": 1,
+			  "Null": 2,
+			  "null": 3,
+			  unambiguous: 4,
+			  "~": 5,
+			}`,
+		expectCompact: `{"NULL": 1, "Null": 2, "null": 3, unambiguous: 4, "~": 5}`,
+	}, {
+		name:  "string map with trues",
+		input: map[string]int{"ON": 1, "On": 2, "TRUE": 3, "True": 4, "YES": 5, "Yes": 6, "on": 7, "true": 8, "yes": 9},
+		expectRegular: `
+			{
+			  "ON": 1,
+			  "On": 2,
+			  "TRUE": 3,
+			  "True": 4,
+			  "YES": 5,
+			  "Yes": 6,
+			  "on": 7,
+			  "true": 8,
+			  "yes": 9,
+			}`,
+		expectCompact: `{"ON": 1, "On": 2, "TRUE": 3, "True": 4, "YES": 5, "Yes": 6, "on": 7, "true": 8, "yes": 9}`,
+	}, {
+		name:  "string map with falses",
+		input: map[string]int{"FALSE": 1, "False": 2, "NO": 3, "No": 4, "OFF": 5, "Off": 6, "false": 7, "no": 8, "off": 9},
+		expectRegular: `
+			{
+			  "FALSE": 1,
+			  "False": 2,
+			  "NO": 3,
+			  "No": 4,
+			  "OFF": 5,
+			  "Off": 6,
+			  "false": 7,
+			  "no": 8,
+			  "off": 9,
+			}`,
+		expectCompact: `{"FALSE": 1, "False": 2, "NO": 3, "No": 4, "OFF": 5, "Off": 6, "false": 7, "no": 8, "off": 9}`,
+	}, {
+		name:  "string map with ints",
+		input: map[string]int{"-1": 1, "1": 2, "_1": 3, "__1__2__": 4},
+		expectRegular: `
+				{
+				  "-1": 1,
+				  "1": 2,
+				  "_1": 3,
+				  "__1__2__": 4,
+				}`,
+		expectCompact: `{"-1": 1, "1": 2, "_1": 3, "__1__2__": 4}`,
+	}, {
+		name:  "string map with floats",
+		input: map[string]int{"+.inf": 1, "-.inf": 2, ".inf": 3, ".nan": 4, "3.14": 5},
+		expectRegular: `
+			{
+			  "+.inf": 1,
+			  "-.inf": 2,
+			  ".inf": 3,
+			  ".nan": 4,
+			  "3.14": 5,
+			}`,
+		expectCompact: `{"+.inf": 1, "-.inf": 2, ".inf": 3, ".nan": 4, "3.14": 5}`,
+	}, {
+		name:  "string map with unquoted keys",
+		input: map[string]int{"_": 1, "_with_underscore_": 2, "safe": 3, "with-dash": 4, "with.dot": 5, "with/slash": 6},
+		expectRegular: `
+			{
+			  _: 1,
+			  _with_underscore_: 2,
+			  safe: 3,
+			  with-dash: 4,
+			  with.dot: 5,
+			  with/slash: 6,
+			}`,
+		expectCompact: `{_: 1, _with_underscore_: 2, safe: 3, with-dash: 4, with.dot: 5, with/slash: 6}`,
+	}, {
+		name:  "string map with quoted keys",
+		input: map[string]int{"not safe": 1, "with\\backslash": 2},
+		expectRegular: `
+			{
+			  "not safe": 1,
+			  "with\\backslash": 2,
+			}`,
+		expectCompact: `{"not safe": 1, "with\\backslash": 2}`,
+	}, {
+		name:  "string map with dash keys",
+		input: map[string]int{"-": 1, "-leading-dash": 2, "trailing-dash-": 3},
+		expectRegular: `
+			{
+			  "-": 1,
+			  "-leading-dash": 2,
+			  "trailing-dash-": 3,
+			}`,
+		expectCompact: `{"-": 1, "-leading-dash": 2, "trailing-dash-": 3}`,
+	}, {
+		name:  "string map with dot keys",
+		input: map[string]int{".": 1, ".leading.dot": 2, "trailing.dot.": 3},
+		expectRegular: `
+			{
+			  ".": 1,
+			  ".leading.dot": 2,
+			  "trailing.dot.": 3,
+			}`,
+		expectCompact: `{".": 1, ".leading.dot": 2, "trailing.dot.": 3}`,
+	}, {
+		name:  "string map with slash keys",
+		input: map[string]int{"/": 1, "/leading/slash": 2, "trailing/slash/": 3},
+		expectRegular: `
+			{
+			  "/": 1,
+			  "/leading/slash": 2,
+			  "trailing/slash/": 3,
+			}`,
+		expectCompact: `{"/": 1, "/leading/slash": 2, "trailing/slash/": 3}`,
+	}, {
+		name:  "string map with dates",
+		input: map[string]int{"11:00": 1, "2006": 2, "2006-1-2": 3, "2006-1-2T15:4:5.999999999-08:00": 4},
+		expectRegular: `
+			{
+			  "11:00": 1,
+			  "2006": 2,
+			  "2006-1-2": 3,
+			  "2006-1-2T15:4:5.999999999-08:00": 4,
+			}`,
+		expectCompact: `{"11:00": 1, "2006": 2, "2006-1-2": 3, "2006-1-2T15:4:5.999999999-08:00": 4}`,
+	}, {
+		name: "multi-line-string-key map",
+		input: map[string]int{
 			"1\n 2\n  \n3": 123,
 			"4\n 5\n  \n6": 456,
-		}, "{\n  \"1\\n 2\\n  \\n3\": 123,\n  \"4\\n 5\\n  \\n6\": 456,\n}"},
-		// pointer
-		{"non-nil pointer", new(int), `0`},
-		{"nil pointer", (*int)(nil), `null`},
-		// slice of compound
-		{"slice of struct", []struct{ I int }{
-			{1}, {2}, {3},
-		}, "[{\n  I: 1,\n}, {\n  I: 2,\n}, {\n  I: 3,\n}]"},
-		{"slice of slice", [][]int{
-			{1, 2, 3},
-			{4, 5, 6},
-			{7, 8, 9},
-		}, "[[\n  1,\n  2,\n  3,\n], [\n  4,\n  5,\n  6,\n], [\n  7,\n  8,\n  9,\n]]"},
-		{"slice of map", []map[string]int{
-			{"a": 1, "b": 2},
-			{"c": 3, "d": 4},
-			{"e": 5, "f": 6},
-		}, "[{\n  a: 1,\n  b: 2,\n}, {\n  c: 3,\n  d: 4,\n}, {\n  e: 5,\n  \"f\": 6,\n}]"},
-		// interface
+		},
+		expectRegular: `
+			{
+			  "1\n 2\n  \n3": 123,
+			  "4\n 5\n  \n6": 456,
+			}`,
+		expectCompact: `{"1\n 2\n  \n3": 123, "4\n 5\n  \n6": 456}`,
+	}, {
+		name:          "non-nil pointer",
+		input:         new(int),
+		expectRegular: `0`,
+		expectCompact: `0`,
+	}, {
+		name:          "nil pointer",
+		input:         (*int)(nil),
+		expectRegular: `null`,
+		expectCompact: `null`,
+	}, {
+		name:  "slice of struct",
+		input: []struct{ I int }{{1}, {2}, {3}},
+		expectRegular: `
+			[{
+			  I: 1,
+			}, {
+			  I: 2,
+			}, {
+			  I: 3,
+			}]`,
+		expectCompact: `[{I: 1}, {I: 2}, {I: 3}]`,
+	}, {
+		name:  "slice of slice",
+		input: [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},
+		expectRegular: `
+			[[
+			  1,
+			  2,
+			  3,
+			], [
+			  4,
+			  5,
+			  6,
+			], [
+			  7,
+			  8,
+			  9,
+			]]`,
+		expectCompact: `[[1, 2, 3], [4, 5, 6], [7, 8, 9]]`,
+	}, {
+		name:  "slice of map",
+		input: []map[string]int{{"a": 1, "b": 2}, {"c": 3, "d": 4}, {"e": 5, "f": 6}},
+		expectRegular: `
+			[{
+			  a: 1,
+			  b: 2,
+			}, {
+			  c: 3,
+			  d: 4,
+			}, {
+			  e: 5,
+			  "f": 6,
+			}]`,
+		expectCompact: `[{a: 1, b: 2}, {c: 3, d: 4}, {e: 5, "f": 6}]`,
 		// TODO: figure out how to make a reflect.Value where Kind() ==
 		// Interface. As far as I can tell, ValueOf() returns either the
 		// underlying type's Kind or Invalid.
+	}}
+
+	mkdoc := func(s string) string {
+		return "---\n" + s + "\n"
+	}
+
+	test := func(t *testing.T, ky *Encoder, input any, expect string) {
+		t.Helper()
+
+		yb, err := ky.Marshal(input)
+		if err != nil {
+			t.Fatalf("failed to marshal KYAML: %v", err)
+		}
+		want := dedent(strings.TrimPrefix(expect, "\n"))
+		got := dedent(strings.TrimPrefix(string(yb), "\n"))
+		if got != want {
+			t.Errorf("Marshal() got wrong result:\nwanted: %q\n   got: %q", want, got)
+		}
+
+		buf := bytes.Buffer{}
+		if err := ky.FromObject(input, &buf); err != nil {
+			t.Fatalf("failed to render KYAML from object: %v", err)
+		}
+		if want, got := mkdoc(want), buf.String(); got != want {
+			t.Errorf("FromObject() got wrong result:\nwanted: %q\n   got: %q", want, got)
+		}
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ky := &Encoder{}
-			yb, err := ky.Marshal(tt.input)
-			if err != nil {
-				t.Fatalf("failed to render KYAML: %v", err)
-			}
-			// always has a newline at the end
-			if result := strings.TrimRight(string(yb), "\n"); result != tt.expected {
-				t.Errorf("Marshal(%v):\nwanted: %q\n   got: %q", tt.input, tt.expected, result)
-			}
+			t.Run("regular", func(t *testing.T) {
+				ky := &Encoder{}
+				test(t, ky, tt.input, tt.expectRegular)
+			})
+			t.Run("compact", func(t *testing.T) {
+				ky := &Encoder{Compact: true}
+				test(t, ky, tt.input, tt.expectCompact)
+			})
 		})
 	}
 }
 
-func TestKYAMLOutputCompact(t *testing.T) {
-	type testCase struct {
-		name     string
-		input    interface{}
-		expected string
-	}
-
-	tests := []testCase{
-		// ints
-		{"positive int", int(123), `123`},
-		{"negative int", int(-123), `-123`},
-		{"zero int", int(0), `0`},
-		{"positive int8", int8(123), `123`},
-		{"negative int8", int8(-123), `-123`},
-		{"zero int8", int8(0), `0`},
-		{"positive int16", int16(123), `123`},
-		{"negative int16", int16(-123), `-123`},
-		{"zero int16", int16(0), `0`},
-		{"positive int32", int32(123), `123`},
-		{"negative int32", int32(-123), `-123`},
-		{"zero int32", int32(0), `0`},
-		{"positive int64", int64(123), `123`},
-		{"negative int64", int64(-123), `-123`},
-		{"zero int64", int64(0), `0`},
-		// uints
-		{"positive uint", uint(123), `123`},
-		{"zero uint", uint(0), `0`},
-		{"positive uint8", uint8(123), `123`},
-		{"zero uint8", uint8(0), `0`},
-		{"positive uint16", uint16(123), `123`},
-		{"zero uint16", uint16(0), `0`},
-		{"positive uint32", uint32(123), `123`},
-		{"zero uint32", uint32(0), `0`},
-		{"positive uint64", uint64(123), `123`},
-		{"zero uint64", uint64(0), `0`},
-		// floats
-		{"positive float32", float32(3.5), `3.5`},
-		{"negative float32", float32(-3.5), `-3.5`},
-		{"zero float32", float32(0.0), `0`},
-		{"positive float64", float64(3.5), `3.5`},
-		{"negative float64", float64(-3.5), `-3.5`},
-		{"zero float64", float64(0.0), `0`},
-		// bool
-		{"true bool", true, `true`},
-		{"false bool", false, `false`},
-		// string
-		{"empty string", "", "\"\""},
-		{"regular string", "abc", "\"abc\""},
-		{"multi-line string",
-			"This\n is a\n  multi-line\n string",
-			"\"This\\n is a\\n  multi-line\\n string\""},
-		// struct
-		{"no-init struct", struct {
-			I int
-			S string
-		}{}, "{I: 0, S: \"\"}"},
-		{"init struct", struct {
-			I int
-			S string
-		}{1, "one"}, "{I: 1, S: \"one\"}"},
-		{"empty struct", struct{}{}, `{}`},
-		{"omitempty struct", struct {
-			I int    `json:",omitempty"`
-			S string `json:",omitempty"`
-			B bool   `json:",omitempty"`
-			P *int   `json:",omitempty"`
-		}{}, "{}"},
-		{"omitempty struct nil slice", struct {
-			S []int `json:",omitempty"`
-		}{}, "{}"},
-		{"omitempty struct empty slice", struct {
-			S []int `json:",omitempty"`
-		}{S: []int{}}, "{}"},
-		{"omitempty struct nil map", struct {
-			M map[int]int `json:",omitempty"`
-		}{}, "{}"},
-		{"omitempty struct empty map", struct {
-			M map[int]int `json:",omitempty"`
-		}{M: map[int]int{}}, "{}"},
-		// slice of primitive
-		{"non-empty slice", []int{1, 2, 3}, "[1, 2, 3]"},
-		{"empty slice", []int{}, `[]`},
-		{"nil slice", []int(nil), `null`},
-		// array of primitive
-		{"empty array", [3]int{}, "[0, 0, 0]"},
-		{"non-empty array", [3]int{1, 2, 3}, "[1, 2, 3]"},
-		{"zero-len array", [0]int{}, `[]`},
-		// map
-		{"non-empty map[string]", map[string]int{"c": 3, "a": 1, "b": 2}, "{a: 1, b: 2, c: 3}"},
-		{"non-empty map[int]", map[int]int{3: 3, 1: 1, 2: 2}, "{\"1\": 1, \"2\": 2, \"3\": 3}"},
-		{"empty map", map[string]int{}, `{}`},
-		{"nil map", map[int]int(nil), `null`},
-		{"string map with nulls", map[string]int{
-			"unambiguous": 4,
-			"null":        3,
-			"Null":        2,
-			"NULL":        1,
-			"~":           5,
-		}, "{\"NULL\": 1, \"Null\": 2, \"null\": 3, unambiguous: 4, \"~\": 5}"},
-		{"string map with trues", map[string]int{
-			"true": 8,
-			"True": 4,
-			"TRUE": 3,
-			"on":   7,
-			"On":   2,
-			"ON":   1,
-			"yes":  9,
-			"Yes":  6,
-			"YES":  5,
-		}, "{\"ON\": 1, \"On\": 2, \"TRUE\": 3, \"True\": 4, \"YES\": 5, \"Yes\": 6, \"on\": 7, \"true\": 8, \"yes\": 9}"},
-		{"string map with falses", map[string]int{
-			"false": 7,
-			"False": 2,
-			"FALSE": 1,
-			"off":   9,
-			"Off":   6,
-			"OFF":   5,
-			"no":    8,
-			"No":    4,
-			"NO":    3,
-		}, "{\"FALSE\": 1, \"False\": 2, \"NO\": 3, \"No\": 4, \"OFF\": 5, \"Off\": 6, \"false\": 7, \"no\": 8, \"off\": 9}"},
-		{"string map with ints", map[string]int{
-			"1":        2,
-			"-1":       1,
-			"_1":       3,
-			"__1__2__": 4,
-		}, "{\"-1\": 1, \"1\": 2, \"_1\": 3, \"__1__2__\": 4}"},
-		{"string map with floats", map[string]int{
-			"3.14":  5,
-			".inf":  3,
-			"-.inf": 2,
-			"+.inf": 1,
-			".nan":  4,
-		}, "{\"+.inf\": 1, \"-.inf\": 2, \".inf\": 3, \".nan\": 4, \"3.14\": 5}"},
-		{"string map with unquoted keys", map[string]int{
-			"safe":              3,
-			"_":                 1,
-			"_with_underscore_": 2,
-			"with-dash":         4,
-			"with.dot":          5,
-			"with/slash":        6,
-		}, "{_: 1, _with_underscore_: 2, safe: 3, with-dash: 4, with.dot: 5, with/slash: 6}"},
-		{"string map with quoted keys", map[string]int{
-			"not safe":        1,
-			"with\\backslash": 2,
-		}, "{\"not safe\": 1, \"with\\\\backslash\": 2}"},
-		{"string map with dash keys", map[string]int{
-			"-":              1,
-			"-leading-dash":  2,
-			"trailing-dash-": 3,
-		}, "{\"-\": 1, \"-leading-dash\": 2, \"trailing-dash-\": 3}"},
-		{"string map with dot keys", map[string]int{
-			".":             1,
-			".leading.dot":  2,
-			"trailing.dot.": 3,
-		}, "{\".\": 1, \".leading.dot\": 2, \"trailing.dot.\": 3}"},
-		{"string map with slash keys", map[string]int{
-			"/":               1,
-			"/leading/slash":  2,
-			"trailing/slash/": 3,
-		}, "{\"/\": 1, \"/leading/slash\": 2, \"trailing/slash/\": 3}"},
-		{"string map with dates", map[string]int{
-			"2006":                            2,
-			"2006-1-2":                        3,
-			"2006-1-2T15:4:5.999999999-08:00": 4,
-			"11:00":                           1,
-		}, "{\"11:00\": 1, \"2006\": 2, \"2006-1-2\": 3, \"2006-1-2T15:4:5.999999999-08:00\": 4}"},
-		{"multi-line-string-key map", map[string]int{
-			"1\n 2\n  \n3": 123,
-			"4\n 5\n  \n6": 456,
-		}, "{\"1\\n 2\\n  \\n3\": 123, \"4\\n 5\\n  \\n6\": 456}"},
-		// pointer
-		{"non-nil pointer", new(int), `0`},
-		{"nil pointer", (*int)(nil), `null`},
-		// slice of compound
-		{"slice of struct", []struct{ I int }{
-			{1}, {2}, {3},
-		}, "[{I: 1}, {I: 2}, {I: 3}]"},
-		{"slice of slice", [][]int{
-			{1, 2, 3},
-			{4, 5, 6},
-			{7, 8, 9},
-		}, "[[1, 2, 3], [4, 5, 6], [7, 8, 9]]"},
-		{"slice of map", []map[string]int{
-			{"a": 1, "b": 2},
-			{"c": 3, "d": 4},
-			{"e": 5, "f": 6},
-		}, "[{a: 1, b: 2}, {c: 3, d: 4}, {e: 5, \"f\": 6}]"},
-		// interface
-		// TODO: figure out how to make a reflect.Value where Kind() ==
-		// Interface. As far as I can tell, ValueOf() returns either the
-		// underlying type's Kind or Invalid.
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ky := &Encoder{Compact: true}
-			yb, err := ky.Marshal(tt.input)
-			if err != nil {
-				t.Fatalf("failed to render KYAML: %v", err)
-			}
-			// always has a newline at the end
-			if result := strings.TrimRight(string(yb), "\n"); result != tt.expected {
-				t.Errorf("Marshal(%v):\nwanted: %q\n   got: %q", tt.input, tt.expected, result)
-			}
-		})
-	}
-}
-
+// TestKYAMLFromYAML checks that the KYAML output is correct for various YAML
+// inputs. It takes YAML inputs in various non-KYAML forms (often, but not
+// exclusively "traditional" YAML), including comments, and re-renders them as
+// KYAML.
 func TestKYAMLFromYAML(t *testing.T) {
 	type testCase struct {
 		name     string
@@ -1697,6 +1862,9 @@ func TestKYAMLFromYAML(t *testing.T) {
 				}
 				`,
 		}, {
+			// This case covers: multi-line, with and without leading spaces
+			// and blank lines.  It's hard to see whitespace, so subsequent
+			// cases cover the same things in a more obvious way.
 			name: "multi-line strings",
 			input: `
 				simple: |
@@ -1708,8 +1876,36 @@ func TestKYAMLFromYAML(t *testing.T) {
 				      retain indentation.
 				blank_lines: |
 				  This is a multi-line string.
-				
+
 				  It can retain blank lines.
+				`,
+			expected: `
+				---
+				{
+				  simple: "\
+				     This is a multi-line string.\n\
+				     It has multiple lines.\n\
+				    ",
+				  leading_space: "\
+				     This is a multi-line string.\n\
+				    \  It can\n\
+				    \    retain indentation.\n\
+				    ",
+				  blank_lines: "\
+				     This is a multi-line string.\n\
+				     \n\
+				     It can retain blank lines.\n\
+				    ",
+				}
+				`,
+		}, {
+			// This case covers: multi-line, with and without leading spaces
+			// and blank lines.
+			name: "multi-line strings dquoted",
+			input: `
+				simple: "This is a multi-line string.\nIt has multiple lines.\n"
+				eading_space: "This is a multi-line string.\n  It can\n    retain indentation.\n"
+				blank_lines: "This is a multi-line string.\n\nIt can retain blank lines.\n"
 				`,
 			expected: `
 				---
@@ -2087,22 +2283,15 @@ func TestKYAMLFromYAML(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ky := &Encoder{}
 
-			// Trimming is just for test output since all test cases have
-			// leading and trailing newlines.
-			input := strings.TrimPrefix(tt.input, "\n")
-			input = strings.TrimSuffix(input, "\n")
-			input = dedent(input)
-
-			expected := strings.TrimPrefix(tt.expected, "\n")
-			expected = strings.TrimSuffix(expected, "\n")
-			expected = dedent(expected)
+			input := dedent(strings.TrimLeft(tt.input, "\n"))
+			expected := dedent(strings.TrimPrefix(tt.expected, "\n"))
 
 			buf := &bytes.Buffer{}
 			if err := ky.FromYAML(strings.NewReader(input), buf); err != nil {
 				t.Fatalf("FromYAML(%q) returned error: %v", input, err)
 			}
 			if want, got := expected, buf.String(); got != want {
-				t.Errorf("FromYAML:\nexpected:\n```\n%s\n```\ngot:\n```\n%s\n```", expected, got)
+				t.Errorf("FromYAML:\nexpected:\n```\n%s\n```\ngot:\n```\n%s\n```\n\nor:\n\nexpected: %q\n     got: %q\n", expected, got, expected, got)
 			}
 		})
 	}
