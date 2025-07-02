@@ -1380,54 +1380,61 @@ func TestKYAMLOutput(t *testing.T) {
 // KYAML.
 func TestKYAMLFromYAML(t *testing.T) {
 	type testCase struct {
-		name     string
-		input    string
-		expected string
+		name          string
+		input         string
+		expectRegular string
+		expectCompact string
 	}
 
 	tests := []testCase{
 		{ // Without comments
-			name:     "empty YAML",
-			input:    ``,
-			expected: ``,
+			name:          "empty YAML",
+			input:         ``,
+			expectRegular: ``,
+			expectCompact: ``,
 		}, {
 			name:  "int",
 			input: `42`,
-			expected: `
+			expectRegular: `
 				---
 				42
 				`,
+			expectCompact: "---\n42\n",
 		}, {
 			name:  "bool",
 			input: `true`,
-			expected: `
+			expectRegular: `
 				---
 				true
 				`,
+			expectCompact: "---\ntrue\n",
 		}, {
 			name:  "naked string",
 			input: `a string`,
-			expected: `
+			expectRegular: `
 				---
 				"a string"
 				`,
+			expectCompact: "---\n\"a string\"\n",
 		}, {
 			name:  "quoted string",
 			input: `a string`,
-			expected: `
+			expectRegular: `
 				---
 				"a string"
 				`,
+			expectCompact: "---\n\"a string\"\n",
 		}, {
 			name: "empty list",
 			input: `
 				[
 				]
 				`,
-			expected: `
+			expectRegular: `
 				---
 				[]
 				`,
+			expectCompact: "---\n[]\n",
 		}, {
 			name: "list of int",
 			input: `
@@ -1436,7 +1443,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				- 2
 				- 3
 				`,
-			expected: `
+			expectRegular: `
 				---
 				[
 				  1,
@@ -1444,6 +1451,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  3,
 				]
 				`,
+			expectCompact: "---\n[1, 2, 3]\n",
 		}, {
 			name: "list of bool",
 			input: `
@@ -1452,7 +1460,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				- false
 				- true
 				`,
-			expected: `
+			expectRegular: `
 				---
 				[
 				  true,
@@ -1460,6 +1468,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  true,
 				]
 				`,
+			expectCompact: "---\n[true, false, true]\n",
 		}, {
 			name: "list of string",
 			input: `
@@ -1468,7 +1477,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				- "dquoted"
 				- 'squoted'
 				`,
-			expected: `
+			expectRegular: `
 				---
 				[
 				  "naked",
@@ -1476,16 +1485,18 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "squoted",
 				]
 				`,
+			expectCompact: "---\n[\"naked\", \"dquoted\", \"squoted\"]\n",
 		}, {
 			name: "empty mapping",
 			input: `
 				{
 				}
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{}
 				`,
+			expectCompact: "---\n{}\n",
 		}, {
 			name: "mapping of ints",
 			input: `
@@ -1493,7 +1504,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				b: 2
 				c: 3
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  a: 1,
@@ -1501,6 +1512,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  c: 3,
 				}
 				`,
+			expectCompact: "---\n{a: 1, b: 2, c: 3}\n",
 		}, {
 			name: "mapping of bool",
 			input: `
@@ -1508,7 +1520,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				b: false
 				c: true
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  a: true,
@@ -1516,6 +1528,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  c: true,
 				}
 				`,
+			expectCompact: "---\n{a: true, b: false, c: true}\n",
 		}, {
 			name: "mapping of string",
 			input: `
@@ -1523,7 +1536,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				b: "dquoted"
 				c: 'squoted'
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  a: "naked",
@@ -1531,6 +1544,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  c: "squoted",
 				}
 				`,
+			expectCompact: "---\n{a: \"naked\", b: \"dquoted\", c: \"squoted\"}\n",
 		}, {
 			// Note: there's no escaping within single-quotes.
 			name: "mapping of strings with quotes",
@@ -1539,7 +1553,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				b: "dquoted \"with\" 'quotes' embedded"
 				c: 'squoted "with" quotes embedded'
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  a: "naked \"with\" 'quotes' embedded",
@@ -1547,6 +1561,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  c: "squoted \"with\" quotes embedded",
 				}
 				`,
+			expectCompact: "---\n{a: \"naked \\\"with\\\" 'quotes' embedded\", b: \"dquoted \\\"with\\\" 'quotes' embedded\", c: \"squoted \\\"with\\\" quotes embedded\"}\n",
 		}, {
 			name: "list of list",
 			input: `
@@ -1563,7 +1578,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  - "dquoted"
 				  - 'squoted'
 				`,
-			expected: `
+			expectRegular: `
 				---
 				[[
 				  1,
@@ -1579,6 +1594,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "squoted",
 				]]
 				`,
+			expectCompact: "---\n[[1, 2, 3], [true, false, true], [\"naked\", \"dquoted\", \"squoted\"]]\n",
 		}, {
 			name: "list of mapping",
 			input: `
@@ -1592,7 +1608,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  b: "dquoted"
 				  c: 'squoted'
 				`,
-			expected: `
+			expectRegular: `
 				---
 				[{
 				  a: 1,
@@ -1608,6 +1624,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  c: "squoted",
 				}]
 				`,
+			expectCompact: "---\n[{a: 1, b: 2, c: 3}, {a: true, b: false, c: true}, {a: \"naked\", b: \"dquoted\", c: \"squoted\"}]\n",
 		}, {
 			name: "mapping of list",
 			input: `
@@ -1624,7 +1641,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				- "dquoted"
 				- 'squoted'
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  a: [
@@ -1644,6 +1661,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  ],
 				}
 				`,
+			expectCompact: "---\n{a: [1, 2, 3], b: [true, false, true], c: [\"naked\", \"dquoted\", \"squoted\"]}\n",
 		}, {
 			name: "mapping with null-string keys",
 			input: `
@@ -1652,7 +1670,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				NULL: 123
 				~: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  "null": 123,
@@ -1661,6 +1679,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "~": 123,
 				}
 				`,
+			expectCompact: "---\n{\"null\": 123, \"Null\": 123, \"NULL\": 123, \"~\": 123}\n",
 		}, {
 			name: "mapping with true-string keys",
 			input: `
@@ -1674,7 +1693,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				Yes: 123
 				YES: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  "true": 123,
@@ -1688,6 +1707,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "YES": 123,
 				}
 				`,
+			expectCompact: "---\n{\"true\": 123, \"True\": 123, \"TRUE\": 123, \"on\": 123, \"On\": 123, \"ON\": 123, \"yes\": 123, \"Yes\": 123, \"YES\": 123}\n",
 		}, {
 			name: "mapping with false-string keys",
 			input: `
@@ -1701,7 +1721,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				No: 123
 				NO: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  "false": 123,
@@ -1715,6 +1735,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "NO": 123,
 				}
 				`,
+			expectCompact: "---\n{\"false\": 123, \"False\": 123, \"FALSE\": 123, \"off\": 123, \"Off\": 123, \"OFF\": 123, \"no\": 123, \"No\": 123, \"NO\": 123}\n",
 		}, {
 			name: "mapping with int-string keys",
 			input: `
@@ -1728,7 +1749,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				_-_1__2__: 123
 				_+_1__2__: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  "1": 123,
@@ -1742,6 +1763,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "_+_1__2__": 123,
 				}
 				`,
+			expectCompact: "---\n{\"1\": 123, \"-1\": 123, \"+1\": 123, \"_1\": 123, \"-_1\": 123, \"+_1\": 123, \"__1__2__\": 123, \"_-_1__2__\": 123, \"_+_1__2__\": 123}\n",
 		}, {
 			name: "mapping with float-string keys",
 			input: `
@@ -1753,7 +1775,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				+.inf: 123
 				.nan: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  "3.14": 123,
@@ -1765,6 +1787,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  ".nan": 123,
 				}
 				`,
+			expectCompact: "---\n{\"3.14\": 123, \"-3.14\": 123, \"+3.14\": 123, \".inf\": 123, \"-.inf\": 123, \"+.inf\": 123, \".nan\": 123}\n",
 		}, {
 			name: "mapping with naked-string keys",
 			input: `
@@ -1775,7 +1798,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				with.dot: 123
 				with/slash: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  safe: 123,
@@ -1786,19 +1809,21 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  with/slash: 123,
 				}
 				`,
+			expectCompact: "---\n{safe: 123, _: 123, _with_underscore_: 123, with-dash: 123, with.dot: 123, with/slash: 123}\n",
 		}, {
 			name: "mapping with unsafe-string keys",
 			input: `
 				not safe: 123
 				with\backslash: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  "not safe": 123,
 				  "with\\backslash": 123,
 				}
 				`,
+			expectCompact: "---\n{\"not safe\": 123, \"with\\\\backslash\": 123}\n",
 		}, {
 			name: "mapping with dash-string keys",
 			input: `
@@ -1806,7 +1831,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				-leading-dash: 123
 				trailing-dash-: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  "-": 123,
@@ -1814,6 +1839,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "trailing-dash-": 123,
 				}
 				`,
+			expectCompact: "---\n{\"-\": 123, \"-leading-dash\": 123, \"trailing-dash-\": 123}\n",
 		}, {
 			name: "mapping with dot-string keys",
 			input: `
@@ -1821,7 +1847,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				.leading.dot: 123
 				trailing.dot.: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  ".": 123,
@@ -1829,6 +1855,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "trailing.dot.": 123,
 				}
 				`,
+			expectCompact: "---\n{\".\": 123, \".leading.dot\": 123, \"trailing.dot.\": 123}\n",
 		}, {
 			name: "mapping with slash-string keys",
 			input: `
@@ -1836,7 +1863,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				/leading/slash: 123
 				trailing/slash/: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  "/": 123,
@@ -1844,6 +1871,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "trailing/slash/": 123,
 				}
 				`,
+			expectCompact: "---\n{\"/\": 123, \"/leading/slash\": 123, \"trailing/slash/\": 123}\n",
 		}, {
 			name: "mapping with date-string keys",
 			input: `
@@ -1852,7 +1880,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				2006-1-2T15:4:5.999999999-08:00: 123
 				11:00: 123
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  "2006": 123,
@@ -1861,6 +1889,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  "11:00": 123,
 				}
 				`,
+			expectCompact: "---\n{\"2006\": 123, \"2006-1-2\": 123, \"2006-1-2T15:4:5.999999999-08:00\": 123, \"11:00\": 123}\n",
 		}, {
 			// This case covers: multi-line, with and without leading spaces
 			// and blank lines.  It's hard to see whitespace, so subsequent
@@ -1883,7 +1912,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 
 				  It can retain blank lines.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  simple: "\
@@ -1907,6 +1936,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				    ",
 				}
 				`,
+			expectCompact: "---\n{simple: \"This is a multi-line string.\\nIt has multiple lines.\\n\", leading_spaces: \"This is a multi-line string.\\n  It can\\n    retain space indentation.\\n\", leading_tabs: \"This is a multi-line string.\\n\\tIt can\\n\\t\\tretain tab indentation.\\n\", blank_lines: \"This is a multi-line string.\\n\\nIt can retain blank lines.\\n\"}\n",
 		}, {
 			// This case covers: multi-line, with and without leading spaces
 			// and blank lines.
@@ -1917,7 +1947,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				leading_tabs: "This is a multi-line string.\n\tIt can\n\t\tretain tab indentation.\n"
 				blank_lines: "This is a multi-line string.\n\nIt can retain blank lines.\n"
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  simple: "\
@@ -1941,6 +1971,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				    ",
 				}
 				`,
+			expectCompact: "---\n{simple: \"This is a multi-line string.\\nIt has multiple lines.\\n\", leading_spaces: \"This is a multi-line string.\\n  It can\\n    retain space indentation.\\n\", leading_tabs: \"This is a multi-line string.\\n\\tIt can\\n\\t\\tretain tab indentation.\\n\", blank_lines: \"This is a multi-line string.\\n\\nIt can retain blank lines.\\n\"}\n",
 		},
 		{ // With comments
 			name: "scalar with comments",
@@ -1951,7 +1982,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				# This is a head comment.
 				# It can be multi-line.
@@ -1959,6 +1990,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
+			expectCompact: "---\n42\n",
 		}, {
 			name: "multi-line string with comments",
 			input: `
@@ -1971,7 +2003,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  # This is a head comment.
@@ -1985,6 +2017,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  # It can also be multi-line.
 				}
 				`,
+			expectCompact: "---\n{foo: \"this is a\\nmulti-line\\ncomment\\n\"}\n",
 		}, {
 			name: "block sequence with comments",
 			input: `
@@ -1996,7 +2029,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				[
 				  # This seems like a head comment.
@@ -2008,6 +2041,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  # It can also be multi-line.
 				]
 				`,
+			expectCompact: "---\n[1, 2, 3]\n",
 		}, {
 			name: "short flow sequence with line-comment",
 			input: `
@@ -2017,7 +2051,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				# This is a head comment.
 				# It can be multi-line.
@@ -2029,6 +2063,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
+			expectCompact: "---\n[1, 2, 3]\n",
 		}, {
 			name: "flow sequence with comments",
 			input: `
@@ -2042,7 +2077,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				# This is a head comment.
 				# It can be multi-line.
@@ -2054,6 +2089,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
+			expectCompact: "---\n[1, 2, 3]\n",
 		}, {}, {
 			name: "block mapping with comments",
 			input: `
@@ -2064,7 +2100,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				{
 				  # This is a head comment.
@@ -2075,6 +2111,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  # It can also be multi-line.
 				}
 				`,
+			expectCompact: "---\n{foo: 1, bar: 2}\n",
 		}, {
 			name: "short flow mapping with line-comment",
 			input: `
@@ -2084,7 +2121,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				# This is a head comment.
 				# It can be multi-line.
@@ -2095,6 +2132,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
+			expectCompact: "---\n{foo: 1, bar: 2}\n",
 		}, {
 			name: "flow mapping with comments",
 			input: `
@@ -2107,7 +2145,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				# This is a head comment.
 				# It can be multi-line.
@@ -2118,6 +2156,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
+			expectCompact: "---\n{foo: 1, bar: 2}\n",
 		}, {
 			name: "list of list with comments",
 			input: `
@@ -2141,7 +2180,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				# This is a head comment.
 				# It can be multi-line.
@@ -2181,6 +2220,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
+			expectCompact: "---\n[[1], [2], [3], [4], [5], [6], [7], [8], [9]]\n",
 		}, {
 			name: "list of map with comments",
 			input: `
@@ -2204,7 +2244,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				# This is a head comment.
 				# It can be multi-line.
@@ -2244,6 +2284,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
+			expectCompact: "---\n[{fld: 1}, {fld: 2}, {fld: 3}, {fld: 4}, {fld: 5}, {fld: 6}, {fld: 7}, {fld: 8}, {fld: 9}]\n",
 		}, {
 			name: "list of mixed types",
 			input: `
@@ -2255,7 +2296,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  [a, b, c],
 				]
 				`,
-			expected: `
+			expectRegular: `
 				---
 				[
 				  "a string",
@@ -2271,6 +2312,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				  ],
 				]
 				`,
+			expectCompact: "---\n[\"a string\", 12345, true, {fld: 1}, [\"a\", \"b\", \"c\"]]\n",
 		}, {
 			name: "doc comments",
 			input: `
@@ -2282,7 +2324,7 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
-			expected: `
+			expectRegular: `
 				---
 				# This seems like a doc comment.
 				# But it will be attributed to the content.
@@ -2291,23 +2333,35 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# This is a foot comment.
 				# It can also be multi-line.
 				`,
+			expectCompact: "---\n42\n",
 		},
+	}
+
+	test := func(t *testing.T, ky *Encoder, input string, expect string) {
+		t.Helper()
+
+		input = dedent(strings.TrimLeft(input, "\n"))
+		expect = dedent(strings.TrimPrefix(expect, "\n"))
+
+		buf := bytes.Buffer{}
+		if err := ky.FromYAML(strings.NewReader(input), &buf); err != nil {
+			t.Fatalf("failed to render KYAML from YAML: %v", err)
+		}
+		if want, got := expect, buf.String(); got != want {
+			t.Errorf("FromYAML() got wrong result:\nwanted:\n```\n%s\n```\ngot:\n```\n%s\n```\n\nor:\n\nwanted: %q\n   got: %q\n", want, got, want, got)
+		}
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ky := &Encoder{}
-
-			input := dedent(strings.TrimLeft(tt.input, "\n"))
-			expected := dedent(strings.TrimPrefix(tt.expected, "\n"))
-
-			buf := &bytes.Buffer{}
-			if err := ky.FromYAML(strings.NewReader(input), buf); err != nil {
-				t.Fatalf("FromYAML(%q) returned error: %v", input, err)
-			}
-			if want, got := expected, buf.String(); got != want {
-				t.Errorf("FromYAML:\nexpected:\n```\n%s\n```\ngot:\n```\n%s\n```\n\nor:\n\nexpected: %q\n     got: %q\n", expected, got, expected, got)
-			}
+			t.Run("regular", func(t *testing.T) {
+				ky := &Encoder{}
+				test(t, ky, tt.input, tt.expectRegular)
+			})
+			t.Run("compact", func(t *testing.T) {
+				ky := &Encoder{Compact: true}
+				test(t, ky, tt.input, tt.expectCompact)
+			})
 		})
 	}
 }
@@ -2400,95 +2454,123 @@ func TestIsTypeAmbiguous(t *testing.T) {
 
 func TestRenderStringEscapes(t *testing.T) {
 	simpleCases := []struct {
-		name   string
-		input  rune
-		expect string
+		name          string
+		input         rune
+		expectRegular string
+		expectCompact string
 	}{{
-		name:   "backslash",
-		input:  '\\',
-		expect: `"\\"`,
+		name:          "backslash",
+		input:         '\\',
+		expectRegular: `"\\"`,
+		expectCompact: `"\\"`,
 	}, {
-		name:   "dquote",
-		input:  '"',
-		expect: `"\""`,
+		name:          "dquote",
+		input:         '"',
+		expectRegular: `"\""`,
+		expectCompact: `"\""`,
 	}, {
-		name:   "bell",
-		input:  '\a',
-		expect: `"\a"`,
+		name:          "bell",
+		input:         '\a',
+		expectRegular: `"\a"`,
+		expectCompact: `"\a"`,
 	}, {
-		name:   "backspace",
-		input:  '\b',
-		expect: `"\b"`,
+		name:          "backspace",
+		input:         '\b',
+		expectRegular: `"\b"`,
+		expectCompact: `"\b"`,
 	}, {
-		name:   "ff",
-		input:  '\f',
-		expect: `"\f"`,
+		name:          "ff",
+		input:         '\f',
+		expectRegular: `"\f"`,
+		expectCompact: `"\f"`,
 	}, {
-		name:   "nl",
-		input:  '\n',
-		expect: "\"\\\n \\n\\\n\"",
+		name:          "nl",
+		input:         '\n',
+		expectRegular: "\"\\\n \\n\\\n\"",
+		expectCompact: "\"\\n\"",
 	}, {
-		name:   "cr",
-		input:  '\r',
-		expect: `"\r"`,
+		name:          "cr",
+		input:         '\r',
+		expectRegular: `"\r"`,
+		expectCompact: `"\r"`,
 	}, {
-		name:   "tab",
-		input:  '\t',
-		expect: "\"\t\"",
+		name:          "tab",
+		input:         '\t',
+		expectRegular: "\"\t\"",
+		expectCompact: "\"\\t\"",
 	}, {
-		name:   "vtab",
-		input:  '\v',
-		expect: `"\v"`,
+		name:          "vtab",
+		input:         '\v',
+		expectRegular: `"\v"`,
+		expectCompact: `"\v"`,
 	}, {
-		name:   "null",
-		input:  '\x00',
-		expect: `"\0"`,
+		name:          "null",
+		input:         '\x00',
+		expectRegular: `"\0"`,
+		expectCompact: `"\0"`,
 	}, {
-		name:   "esc",
-		input:  '\x1b',
-		expect: `"\e"`,
+		name:          "esc",
+		input:         '\x1b',
+		expectRegular: `"\e"`,
+		expectCompact: `"\e"`,
 	}, {
-		name:   "nextline",
-		input:  '\u0085',
-		expect: `"\N"`,
+		name:          "nextline",
+		input:         '\u0085',
+		expectRegular: `"\N"`,
+		expectCompact: `"\N"`,
 	}, {
-		name:   "nbsp",
-		input:  '\u00a0',
-		expect: `"\_"`,
+		name:          "nbsp",
+		input:         '\u00a0',
+		expectRegular: `"\_"`,
+		expectCompact: `"\_"`,
 	}, {
-		name:   "linesep",
-		input:  '\u2028',
-		expect: `"\L"`,
+		name:          "linesep",
+		input:         '\u2028',
+		expectRegular: `"\L"`,
+		expectCompact: `"\L"`,
 	}, {
-		name:   "parasep",
-		input:  '\u2029',
-		expect: `"\P"`,
+		name:          "parasep",
+		input:         '\u2029',
+		expectRegular: `"\P"`,
+		expectCompact: `"\P"`,
 	}, {
-		name:   "x01",
-		input:  '\x01',
-		expect: `"\x01"`,
+		name:          "x01",
+		input:         '\x01',
+		expectRegular: `"\x01"`,
+		expectCompact: `"\x01"`,
 	}, {
-		name:   "uffff",
-		input:  '\uffff',
-		expect: `"\uffff"`,
+		name:          "uffff",
+		input:         '\uffff',
+		expectRegular: `"\uffff"`,
+		expectCompact: `"\uffff"`,
 	}, {
-		name:   "U0010ffff",
-		input:  '\U0010ffff',
-		expect: `"\U0010ffff"`,
+		name:          "U0010ffff",
+		input:         '\U0010ffff',
+		expectRegular: `"\U0010ffff"`,
+		expectCompact: `"\U0010ffff"`,
 	}}
+
+	test := func(t *testing.T, input string, flags flagMask, expect string) {
+		t.Helper()
+		ky := &Encoder{}
+		buf := &bytes.Buffer{}
+		err := ky.renderString(input, 0, flags, buf)
+		if err != nil {
+			t.Fatalf("renderString(%q) returned error: %v", input, err)
+		}
+		if result := buf.String(); result != expect {
+			t.Errorf("renderString(%q): want %q, got %q", input, expect, result)
+		}
+	}
 
 	for _, tt := range simpleCases {
 		t.Run(tt.name, func(t *testing.T) {
-			ky := &Encoder{}
-			buf := &bytes.Buffer{}
-			err := ky.renderString(string(tt.input), 0, 0, buf)
-			if err != nil {
-				t.Fatalf("renderString(%q) returned error: %v", tt.input, err)
-			}
-			if result := buf.String(); result != tt.expect {
-				t.Errorf("renderString(%q): want %q, got %q", tt.input, tt.expect, result)
-			}
+			t.Run("regular", func(t *testing.T) {
+				test(t, string(tt.input), flagsNone, tt.expectRegular)
+			})
+			t.Run("compact", func(t *testing.T) {
+				test(t, string(tt.input), flagCompact, tt.expectCompact)
+			})
 		})
 	}
-
 }
