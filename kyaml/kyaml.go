@@ -278,6 +278,15 @@ func (ky *Encoder) renderScalar(node *yaml.Node, indent int, flags flagMask, out
 
 const kyamlFoldStr = "\\\n"
 
+var regularEscapeMap = map[rune]string{
+	'\n': "\\n" + kyamlFoldStr, // use YAML's line folding to make the output more readable
+	'\t': "\t",                 // literal tab
+}
+var compactEscapeMap = map[rune]string{
+	'\n': "\\n",
+	'\t': "\\t",
+}
+
 // renderString processes a string (either single-line or multi-line),
 // rendering it to the output.  This DOES NOT render a trailing newline.
 func (ky *Encoder) renderString(val string, indent int, flags flagMask, out io.Writer) error {
@@ -290,11 +299,10 @@ func (ky *Encoder) renderString(val string, indent int, flags flagMask, out io.W
 		return nil
 	}
 
-	// What to print when we find a newline in the input.
-	newline := "\\n"
-	if !compact {
-		// We use YAML's line folding to make the output more readable.
-		newline += kyamlFoldStr
+	// Special cases for certain input.
+	escapeOverrides := regularEscapeMap
+	if compact {
+		escapeOverrides = compactEscapeMap
 	}
 
 	//
@@ -325,7 +333,7 @@ func (ky *Encoder) renderString(val string, indent int, flags flagMask, out io.W
 			fmt.Fprintf(buf, "%02x", s[0])
 			continue
 		}
-		ky.appendEscapedRune(r, indent, newline, buf)
+		ky.appendEscapedRune(r, indent, escapeOverrides, buf)
 	}
 
 	// closing quote
@@ -485,7 +493,7 @@ func parseTimestamp(s string) (time.Time, bool) {
 }
 
 // We use a buffer here so we can peek backwards.
-func (ky *Encoder) appendEscapedRune(r rune, indent int, newline string, buf *bytes.Buffer) {
+func (ky *Encoder) appendEscapedRune(r rune, indent int, escapeOverrides map[rune]string, buf *bytes.Buffer) {
 	afterNewline := buf.Bytes()[len(buf.Bytes())-1] == '\n'
 
 	if afterNewline {
@@ -504,6 +512,10 @@ func (ky *Encoder) appendEscapedRune(r rune, indent int, newline string, buf *by
 			buf.WriteRune(' ')
 		}
 	}
+	if s, found := escapeOverrides[r]; found {
+		buf.WriteString(s)
+		return
+	}
 	if r == '"' || r == '\\' { // always escaped
 		buf.WriteRune('\\')
 		buf.WriteRune(r)
@@ -521,7 +533,7 @@ func (ky *Encoder) appendEscapedRune(r rune, indent int, newline string, buf *by
 	case '\f':
 		buf.WriteString(`\f`)
 	case '\n':
-		buf.WriteString(newline)
+		buf.WriteString(`\n`)
 	case '\r':
 		buf.WriteString(`\r`)
 	case '\t':

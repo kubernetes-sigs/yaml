@@ -1870,10 +1870,14 @@ func TestKYAMLFromYAML(t *testing.T) {
 				simple: |
 				  This is a multi-line string.
 				  It has multiple lines.
-				leading_space: |
+				leading_spaces: |
 				  This is a multi-line string.
 				    It can
-				      retain indentation.
+				      retain space indentation.
+				leading_tabs: |
+				  This is a multi-line string.
+				  	It can
+				  		retain tab indentation.
 				blank_lines: |
 				  This is a multi-line string.
 
@@ -1886,10 +1890,15 @@ func TestKYAMLFromYAML(t *testing.T) {
 				     This is a multi-line string.\n\
 				     It has multiple lines.\n\
 				    ",
-				  leading_space: "\
+				  leading_spaces: "\
 				     This is a multi-line string.\n\
 				    \  It can\n\
-				    \    retain indentation.\n\
+				    \    retain space indentation.\n\
+				    ",
+				  leading_tabs: "\
+				     This is a multi-line string.\n\
+				    \	It can\n\
+				    \		retain tab indentation.\n\
 				    ",
 				  blank_lines: "\
 				     This is a multi-line string.\n\
@@ -1904,7 +1913,8 @@ func TestKYAMLFromYAML(t *testing.T) {
 			name: "multi-line strings dquoted",
 			input: `
 				simple: "This is a multi-line string.\nIt has multiple lines.\n"
-				eading_space: "This is a multi-line string.\n  It can\n    retain indentation.\n"
+				leading_spaces: "This is a multi-line string.\n  It can\n    retain space indentation.\n"
+				leading_tabs: "This is a multi-line string.\n\tIt can\n\t\tretain tab indentation.\n"
 				blank_lines: "This is a multi-line string.\n\nIt can retain blank lines.\n"
 				`,
 			expected: `
@@ -1914,10 +1924,15 @@ func TestKYAMLFromYAML(t *testing.T) {
 				     This is a multi-line string.\n\
 				     It has multiple lines.\n\
 				    ",
-				  leading_space: "\
+				  leading_spaces: "\
 				     This is a multi-line string.\n\
 				    \  It can\n\
-				    \    retain indentation.\n\
+				    \    retain space indentation.\n\
+				    ",
+				  leading_tabs: "\
+				     This is a multi-line string.\n\
+				    \	It can\n\
+				    \		retain tab indentation.\n\
 				    ",
 				  blank_lines: "\
 				     This is a multi-line string.\n\
@@ -2419,7 +2434,7 @@ func TestRenderStringEscapes(t *testing.T) {
 	}, {
 		name:   "tab",
 		input:  '\t',
-		expect: `"\t"`,
+		expect: "\"\t\"",
 	}, {
 		name:   "vtab",
 		input:  '\v',
