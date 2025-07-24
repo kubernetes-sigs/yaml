@@ -25,6 +25,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	yamlv3 "go.yaml.in/yaml/v3"
 	"sigs.k8s.io/randfill"
 	"sigs.k8s.io/yaml"
 )
@@ -2334,6 +2335,25 @@ func TestKYAMLFromYAML(t *testing.T) {
 				# It can also be multi-line.
 				`,
 			expectCompact: "---\n42\n",
+		}, {
+			name: "YAML alias",
+			input: `
+				list:
+				  - &alias 42
+				  - 43
+				  - *alias
+				`,
+			expectRegular: `
+				---
+				{
+				  list: [
+				    42,
+				    43,
+				    42,
+				  ],
+				}
+				`,
+			expectCompact: "---\n{list: [42, 43, 42]}\n",
 		},
 	}
 
@@ -2572,5 +2592,218 @@ func TestRenderStringEscapes(t *testing.T) {
 				test(t, string(tt.input), flagCompact, tt.expectCompact)
 			})
 		})
+	}
+}
+
+func TestUnexpectedErrors(t *testing.T) {
+	// This test is to ensure that we don't panic when we encounter unexpected
+	// errors, such as nil pointers or other runtime errors.
+	ky := &Encoder{}
+
+	t.Run("renderNode(nil)", func(t *testing.T) {
+		err := ky.renderNode(nil, 0, 0, nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("renderNode(<unknown kind>)", func(t *testing.T) {
+		n := yamlv3.Node{
+			Kind: 0,
+		}
+		err := ky.renderNode(&n, 0, 0, nil)
+		if err == nil {
+			t.Errorf("expected error")
+		}
+	})
+
+	t.Run("YAML Node without tag", func(t *testing.T) {
+		n := yamlv3.Node{
+			Kind: yamlv3.DocumentNode,
+			Content: []*yamlv3.Node{
+				&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "test", Tag: ""},
+			},
+		}
+		err := ky.renderDocument(&n, 0, 0, nil)
+		if err == nil {
+			t.Errorf("expected error")
+		}
+	})
+
+	t.Run("renderDocument", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		t.Run("should pass", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind: yamlv3.DocumentNode,
+				Content: []*yamlv3.Node{
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "test", Tag: "!!str"},
+				},
+			}
+			err := ky.renderDocument(&n, 0, 0, &buf)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+		t.Run("0 contents", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind:    yamlv3.DocumentNode,
+				Content: nil,
+			}
+			err := ky.renderDocument(&n, 0, 0, &buf)
+			if err == nil {
+				t.Errorf("expected error")
+			}
+		})
+		t.Run("2 contents", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind: yamlv3.DocumentNode,
+				Content: []*yamlv3.Node{
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "test1", Tag: "!!str"},
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "test2", Tag: "!!str"},
+				},
+			}
+			err := ky.renderDocument(&n, 0, 0, &buf)
+			if err == nil {
+				t.Errorf("expected error")
+			}
+		})
+		t.Run("non-zero indent", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind: yamlv3.DocumentNode,
+				Content: []*yamlv3.Node{
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "test", Tag: "!!str"},
+				},
+			}
+			err := ky.renderDocument(&n, 1, 0, &buf)
+			if err == nil {
+				t.Errorf("expected error")
+			}
+		})
+	})
+
+	t.Run("renderScalar", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		t.Run("should pass", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind:  yamlv3.ScalarNode,
+				Value: "test",
+				Tag:   "!!str",
+			}
+			err := ky.renderScalar(&n, 0, 0, &buf)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+		t.Run("unknown tag", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind:  yamlv3.ScalarNode,
+				Value: "test",
+				Tag:   "",
+			}
+			err := ky.renderScalar(&n, 0, 0, &buf)
+			if err == nil {
+				t.Errorf("expected error")
+			}
+		})
+	})
+
+	t.Run("renderMapping", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		t.Run("should pass 1", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind: yamlv3.MappingNode,
+				Content: []*yamlv3.Node{
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "key", Tag: "!!str"},
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "val", Tag: "!!str"},
+				},
+			}
+			err := ky.renderMapping(&n, 0, 0, &buf)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+		t.Run("should pass 2", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind: yamlv3.MappingNode,
+				Content: []*yamlv3.Node{
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "key", Tag: "!!str", LineComment: "line comment"},
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "val", Tag: "!!str"},
+				},
+			}
+			err := ky.renderMapping(&n, 0, 0, &buf)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+		t.Run("should pass 3", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind: yamlv3.MappingNode,
+				Content: []*yamlv3.Node{
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "key", Tag: "!!str"},
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "val", Tag: "!!str", LineComment: "line comment"},
+				},
+			}
+			err := ky.renderMapping(&n, 0, 0, &buf)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+		t.Run("line-comments on key and val", func(t *testing.T) {
+			n := yamlv3.Node{
+				Kind: yamlv3.MappingNode,
+				Content: []*yamlv3.Node{
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "key", Tag: "!!str", LineComment: "line comment"},
+					&yamlv3.Node{Kind: yamlv3.ScalarNode, Value: "val", Tag: "!!str", LineComment: "line comment"},
+				},
+			}
+			err := ky.renderMapping(&n, 0, 0, &buf)
+			if err == nil {
+				t.Errorf("expected error")
+			}
+		})
+	})
+}
+
+func TestNodeKindString(t *testing.T) {
+	tests := []struct {
+		kind     yamlv3.Kind
+		expected string
+	}{
+		{yamlv3.DocumentNode, "document"},
+		{yamlv3.ScalarNode, "scalar"},
+		{yamlv3.MappingNode, "mapping"},
+		{yamlv3.SequenceNode, "sequence"},
+		{yamlv3.AliasNode, "alias"},
+		{0, "unknown"},
+	}
+
+	ky := &Encoder{}
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			if got := ky.nodeKindString(tt.kind); got != tt.expected {
+				t.Errorf("nodeKindString(%d) = %q, want %q", tt.kind, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsCuddledKind(t *testing.T) {
+	tests := []struct {
+		node     yamlv3.Node
+		expected bool
+	}{
+		{yamlv3.Node{Kind: yamlv3.SequenceNode}, true},
+		{yamlv3.Node{Kind: yamlv3.MappingNode}, true},
+		{yamlv3.Node{Kind: yamlv3.DocumentNode}, false},
+		{yamlv3.Node{Kind: yamlv3.ScalarNode}, false},
+		{yamlv3.Node{Kind: yamlv3.AliasNode, Alias: &yamlv3.Node{Kind: yamlv3.SequenceNode}}, true},
+		{yamlv3.Node{Kind: yamlv3.AliasNode, Alias: &yamlv3.Node{Kind: yamlv3.ScalarNode}}, false},
+		{yamlv3.Node{Kind: 0}, false},
+	}
+
+	for _, tt := range tests {
+		if got := isCuddledKind(&tt.node); got != tt.expected {
+			t.Errorf("isCuddledKind(%v) = %v, want %v", tt.node, got, tt.expected)
+		}
 	}
 }

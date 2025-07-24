@@ -207,7 +207,7 @@ func (ky *Encoder) renderNode(node *yaml.Node, indent int, flags flagMask, out i
 	case yaml.AliasNode:
 		return ky.renderAlias(node, indent, flags, out)
 	}
-	return nil
+	return fmt.Errorf("kyaml internal error: line %d: unknown node kind %v", node.Line, node.Kind)
 }
 
 // renderDocument processes a YAML document node, rendering it to the output.
