@@ -363,7 +363,7 @@ func convertToJSONableObject(yamlObj interface{}, jsonTarget *reflect.Value) (in
 //
 // interface{} slices stay interface{} slices. map[string]interface{} becomes yaml.MapSlice.
 //
-// int64 and float64 are down casted following the logic of github.com/go-yaml/yaml:
+// int64 and float64 are down casted following the logic of github.com/yaml/go-yaml:
 // - float64s are down-casted as far as possible without data-loss to int, int64, uint64.
 // - int64s are down-casted to int if possible without data-loss.
 //
@@ -398,7 +398,7 @@ func jsonToYAMLValue(j interface{}) interface{} {
 		}
 		return ret
 	case float64:
-		// replicate the logic in https://github.com/go-yaml/yaml/blob/51d6538a90f86fe93ac480b35f37b2be17fef232/resolve.go#L151
+		// replicate the logic in https://github.com/yaml/go-yaml/blob/51d6538a90f86fe93ac480b35f37b2be17fef232/resolve.go#L151
 		if i64 := int64(j); j == float64(i64) {
 			if i := int(i64); i64 == int64(i) {
 				return i
