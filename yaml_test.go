@@ -175,15 +175,15 @@ func testYAMLToJSON(t *testing.T, f testYAMLToJSONFunc, tests map[string]yamlToJ
 type MarshalTest struct {
 	A string
 	B int64
-	// Would like to test float64, but it's not supported in go-yaml.
-	// (See https://github.com/go-yaml/yaml/issues/83.)
 	C float32
+	D float64
 }
 
 func TestMarshal(t *testing.T) {
 	f32String := strconv.FormatFloat(math.MaxFloat32, 'g', -1, 32)
-	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat32}
-	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\n", math.MaxInt64, f32String))
+	f64String := strconv.FormatFloat(math.MaxFloat64, 'g', -1, 64)
+	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat32, math.MaxFloat64}
+	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\nD: %s\n", math.MaxInt64, f32String, f64String))
 
 	y, err := Marshal(s)
 	if err != nil {
