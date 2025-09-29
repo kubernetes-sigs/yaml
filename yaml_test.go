@@ -37,6 +37,26 @@ func strPtr(str string) *string {
 	return &str
 }
 
+// newIntPtr returns a pointer to a new int or int64 based on architecture.
+// On 64-bit platforms, it returns *int to test unsized int behavior.
+// On 32-bit platforms, it returns *int64 to test the large value that doesn't fit in 32-bit int.
+func newIntPtr() interface{} {
+	if strconv.IntSize == 64 {
+		return new(int)
+	}
+	return new(int64)
+}
+
+// expectedIntValue returns the expected decoded value for architecture-specific int tests.
+// On 64-bit platforms, it returns the value as int.
+// On 32-bit platforms, it returns the value as int64 since the large value doesn't fit in 32-bit int.
+func expectedIntValue(value int64) interface{} {
+	if strconv.IntSize == 64 {
+		return int(value)
+	}
+	return value
+}
+
 type errorType int
 
 const (
@@ -183,7 +203,7 @@ func TestMarshal(t *testing.T) {
 	f32String := strconv.FormatFloat(math.MaxFloat32, 'g', -1, 32)
 	f64String := strconv.FormatFloat(math.MaxFloat64, 'g', -1, 64)
 	s := MarshalTest{"a", math.MaxInt64, math.MaxFloat32, math.MaxFloat64}
-	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\nD: %s\n", math.MaxInt64, f32String, f64String))
+	e := []byte(fmt.Sprintf("A: a\nB: %d\nC: %s\nD: %s\n", int64(math.MaxInt64), f32String, f64String))
 
 	y, err := Marshal(s)
 	if err != nil {
@@ -409,10 +429,15 @@ func TestUnmarshal(t *testing.T) {
 		},
 
 		// decoding integers
-		"decode 2^53 + 1 into int": {
+		"decode 2^53 + 1 into int64": {
 			encoded:    []byte("9007199254740993"),
-			decodeInto: new(int),
-			decoded:    9007199254740993,
+			decodeInto: new(int64),
+			decoded:    int64(9007199254740993),
+		},
+		"decode 2^53 + 1 into int (architecture-specific)": {
+			encoded:    []byte("9007199254740993"),
+			decodeInto: newIntPtr(),
+			decoded:    expectedIntValue(9007199254740993),
 		},
 		"decode 2^53 + 1 into interface": {
 			encoded:    []byte("9007199254740993"),
