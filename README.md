@@ -1,6 +1,6 @@
 # YAML marshaling and unmarshaling support for Go
 
-[![Build Status](https://travis-ci.org/kubernetes-sigs/yaml.svg)](https://travis-ci.org/kubernetes-sigs/yaml)
+[![Go](https://github.com/kubernetes-sigs/yaml/actions/workflows/go.yml/badge.svg)](https://github.com/kubernetes-sigs/yaml/actions/workflows/go.yml)
 
 kubernetes-sigs/yaml is a permanent fork of [ghodss/yaml](https://github.com/ghodss/yaml).
 
